@@ -1,0 +1,34 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: career-os-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: career-os-backend
+    ports:
+      - "8000:8000"
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      MONGO_URI: ${MONGO_URI:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+    depends_on:
+      redis:
+        condition: service_healthy
+    profiles:
+      - full
+
+volumes:
+  redis_data:
