@@ -1,35 +1,28 @@
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8001"
-
-/**
- * @param {Response} response
- * @returns {Promise<string>}
- */
-async function parseErrorMessage(response) {
-  try {
-    const data = await response.json()
-    const detail = data?.detail
-
-    if (typeof detail === "string") {
-      return detail
-    }
-
-    if (detail?.message) {
-      return detail.message
-    }
-
-    return data?.message ?? `Request failed (${response.status})`
-  } catch {
-    return `Request failed (${response.status})`
-  }
-}
+import { apiFetch, parseErrorMessage } from "@/lib/apiClient"
 
 /**
  * Fetch jobs from public APIs, run match analysis, and store in MongoDB.
  * @returns {Promise<Record<string, unknown>>}
  */
+/**
+ * Headless LinkedIn discovery; merges new jobs into the latest scan feed.
+ * @returns {Promise<Record<string, unknown>>}
+ */
+export async function fetchLinkedInJobs() {
+  const response = await apiFetch(`/fetch-linkedin`, {
+    method: "POST",
+  })
+
+  if (!response.ok) {
+    const message = await parseErrorMessage(response)
+    throw new Error(message)
+  }
+
+  return response.json()
+}
+
 export async function fetchJobs() {
-  const response = await fetch(`${API_BASE_URL}/fetch-jobs`, {
+  const response = await apiFetch(`/fetch-jobs`, {
     method: "POST",
   })
 
@@ -46,7 +39,7 @@ export async function fetchJobs() {
  * @returns {Promise<Array<Record<string, unknown>>>}
  */
 export async function getJobs() {
-  const response = await fetch(`${API_BASE_URL}/jobs`)
+  const response = await apiFetch(`/jobs`)
 
   if (!response.ok) {
     const message = await parseErrorMessage(response)

@@ -7,6 +7,7 @@ from bson.errors import InvalidId
 from motor.motor_asyncio import AsyncIOMotorCollection
 
 from app.core.database import get_database
+from app.core.user_context import get_request_user_id
 from app.models.resume import ResumeCreate, ResumeDocument
 from app.services.cloudinary_service import ResumeUploadResult
 from app.services.resume_parser_service import ParsedResumeProfile
@@ -63,8 +64,9 @@ def _document_from_create(parsed_resume_data: ResumeCreate) -> dict[str, Any]:
         "uploaded_at": timestamp,
         "created_at": timestamp,
     }
-    if parsed_resume_data.user_id:
-        document["user_id"] = parsed_resume_data.user_id
+    user_id = parsed_resume_data.user_id or get_request_user_id()
+    if user_id:
+        document["user_id"] = user_id
     return document
 
 
@@ -99,7 +101,11 @@ async def get_resume_by_id(resume_id: str) -> ResumeDocument:
 
     try:
         collection = _get_resumes_collection()
-        document = await collection.find_one({"_id": object_id})
+        query: dict[str, Any] = {"_id": object_id}
+        user_id = get_request_user_id()
+        if user_id:
+            query["user_id"] = user_id
+        document = await collection.find_one(query)
     except RuntimeError as exc:
         raise ResumeServiceError("Database is not available") from exc
     except Exception as exc:
@@ -112,11 +118,38 @@ async def get_resume_by_id(resume_id: str) -> ResumeDocument:
     return ResumeDocument.from_mongo(document)
 
 
+def get_resume_by_id_sync(resume_id: str) -> ResumeDocument | None:
+    """Sync resume fetch for Playwright worker subprocess."""
+    import os
+
+    from pymongo import MongoClient
+
+    try:
+        object_id = ObjectId(resume_id)
+    except InvalidId:
+        return None
+
+    uri = os.getenv("MONGO_URI", "").strip()
+    if not uri:
+        return None
+
+    client = MongoClient(uri)
+    document = client["career_os"][RESUMES_COLLECTION].find_one({"_id": object_id})
+    client.close()
+    if not document:
+        return None
+    return ResumeDocument.from_mongo(document)
+
+
 async def get_all_resumes() -> list[ResumeDocument]:
     """Return all resumes, newest first (ready for future user scoping)."""
     try:
         collection = _get_resumes_collection()
-        cursor = collection.find({}).sort("created_at", -1)
+        query: dict[str, Any] = {}
+        user_id = get_request_user_id()
+        if user_id:
+            query["user_id"] = user_id
+        cursor = collection.find(query).sort("created_at", -1)
         documents = await cursor.to_list(length=None)
         return [ResumeDocument.from_mongo(doc) for doc in documents]
     except RuntimeError as exc:

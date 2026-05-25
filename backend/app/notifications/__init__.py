@@ -1,1 +1,1 @@
-"""Email and notification delivery domain (not implemented yet)."""
+"""Notification delivery — email, in-app, and future channels."""

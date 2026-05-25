@@ -119,6 +119,18 @@ def _detect_extension(resume_url: str, filename: str) -> str:
     )
 
 
+def _write_temp_file(file_data: bytes, suffix: str) -> Path:
+    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+    temp_path = Path(temp_file.name)
+    try:
+        temp_file.write(file_data)
+        temp_file.close()
+    except OSError as exc:
+        temp_path.unlink(missing_ok=True)
+        raise ResumeParseError("Failed to write temporary resume file") from exc
+    return temp_path
+
+
 def _download_resume_sync(resume_url: str, suffix: str) -> Path:
     try:
         response = requests.get(resume_url, timeout=DOWNLOAD_TIMEOUT_SECONDS)
@@ -127,16 +139,61 @@ def _download_resume_sync(resume_url: str, suffix: str) -> Path:
         logger.exception("Failed to download resume from Cloudinary")
         raise ResumeParseError("Failed to download resume for parsing") from exc
 
-    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
-    temp_path = Path(temp_file.name)
-    try:
-        temp_file.write(response.content)
-        temp_file.close()
-    except OSError as exc:
-        temp_path.unlink(missing_ok=True)
-        raise ResumeParseError("Failed to write temporary resume file") from exc
+    return _write_temp_file(response.content, suffix)
 
-    return temp_path
+
+def _parse_resume_bytes_sync(
+    file_data: bytes,
+    filename: str,
+    resume_url: str,
+) -> ParsedResumeProfile:
+    extension = _detect_extension(resume_url, filename)
+    temp_path: Path | None = None
+
+    try:
+        temp_path = _write_temp_file(file_data, extension)
+        return _build_parsed_profile(temp_path, extension, resume_url, filename)
+    finally:
+        if temp_path is not None:
+            try:
+                temp_path.unlink(missing_ok=True)
+                logger.debug("Temporary resume file removed: %s", temp_path)
+            except OSError:
+                logger.warning("Failed to remove temporary resume file: %s", temp_path)
+
+
+def _build_parsed_profile(
+    temp_path: Path,
+    extension: str,
+    resume_url: str,
+    filename: str,
+) -> ParsedResumeProfile:
+    raw_text = _extract_raw_text(temp_path, extension)
+
+    if not raw_text:
+        logger.warning("No text extracted from resume: %s", filename)
+
+    emails = _extract_emails(raw_text)
+    links = _extract_links(raw_text)
+    skills = extract_skills_from_text(raw_text)
+    experience_keywords = _extract_experience_keywords(raw_text, skills)
+
+    logger.info(
+        "Resume parsed: emails=%d links=%d skills=%d experience_keywords=%d",
+        len(emails),
+        len(links),
+        len(skills),
+        len(experience_keywords),
+    )
+
+    return ParsedResumeProfile(
+        raw_text=raw_text,
+        emails=emails,
+        links=links,
+        skills=skills,
+        experience_keywords=experience_keywords,
+        resume_url=resume_url,
+    )
 
 
 def _extract_text_from_pdf(file_path: Path) -> str:
@@ -238,32 +295,7 @@ def _parse_resume_sync(resume_url: str, filename: str) -> ParsedResumeProfile:
 
     try:
         temp_path = _download_resume_sync(resume_url, extension)
-        raw_text = _extract_raw_text(temp_path, extension)
-
-        if not raw_text:
-            logger.warning("No text extracted from resume: %s", filename)
-
-        emails = _extract_emails(raw_text)
-        links = _extract_links(raw_text)
-        skills = extract_skills_from_text(raw_text)
-        experience_keywords = _extract_experience_keywords(raw_text, skills)
-
-        logger.info(
-            "Resume parsed: emails=%d links=%d skills=%d experience_keywords=%d",
-            len(emails),
-            len(links),
-            len(skills),
-            len(experience_keywords),
-        )
-
-        return ParsedResumeProfile(
-            raw_text=raw_text,
-            emails=emails,
-            links=links,
-            skills=skills,
-            experience_keywords=experience_keywords,
-            resume_url=resume_url,
-        )
+        return _build_parsed_profile(temp_path, extension, resume_url, filename)
     finally:
         if temp_path is not None:
             try:
@@ -271,6 +303,25 @@ def _parse_resume_sync(resume_url: str, filename: str) -> ParsedResumeProfile:
                 logger.debug("Temporary resume file removed: %s", temp_path)
             except OSError:
                 logger.warning("Failed to remove temporary resume file: %s", temp_path)
+
+
+async def parse_resume_from_bytes(
+    file_data: bytes,
+    filename: str,
+    resume_url: str,
+) -> ParsedResumeProfile:
+    """Parse resume bytes locally (avoids re-downloading from Cloudinary)."""
+    if not file_data:
+        raise ResumeParseError("Resume file is empty")
+    if not resume_url.strip():
+        raise ResumeParseError("resume_url is required")
+
+    return await asyncio.to_thread(
+        _parse_resume_bytes_sync,
+        file_data,
+        filename,
+        resume_url,
+    )
 
 
 async def parse_resume_from_url(

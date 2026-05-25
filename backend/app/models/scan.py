@@ -7,13 +7,14 @@ class RunScanNowRequest(BaseModel):
 
 class RunScanNowResponse(BaseModel):
     status: str
-    scan_id: str
-    jobs_found: int
-    email_sent: bool
-    email_to: str
+    scan_id: str = ""
+    jobs_found: int = 0
+    email_sent: bool = False
+    email_to: str = ""
     scan_timestamp: str = ""
     stored: int = 0
     email_error: str = ""
+    task_id: str = ""
 
 
 class EmailPreviewResponse(BaseModel):

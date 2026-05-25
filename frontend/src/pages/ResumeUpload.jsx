@@ -17,6 +17,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import { useResumeOnboarding } from "@/context/ResumeOnboardingContext"
 import { cn } from "@/lib/utils"
 import { uploadResume, validateResumeFile } from "@/services/resumeService"
 
@@ -74,6 +75,7 @@ function ProfileSection({ title, description, icon: Icon, children }) {
 
 export function ResumeUpload() {
   const inputRef = useRef(null)
+  const { gateActive, completeUpload } = useResumeOnboarding()
   const [selectedFile, setSelectedFile] = useState(null)
   const [isDragging, setIsDragging] = useState(false)
   const [status, setStatus] = useState("idle")
@@ -126,6 +128,7 @@ export function ResumeUpload() {
       })
       setResult(data)
       setStatus("success")
+      completeUpload()
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed. Please try again.")
       setStatus("error")
@@ -144,6 +147,15 @@ export function ResumeUpload() {
           Upload a resume to extract skills, contact signals, and experience keywords.
         </p>
       </div>
+
+      {gateActive ? (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100/90">
+          <p className="font-medium text-amber-100">Upload your resume to unlock the rest of Career OS</p>
+          <p className="mt-1 text-amber-100/80">
+            We use your resume to personalize job matches, scans, and AI recommendations.
+          </p>
+        </div>
+      ) : null}
 
       {/* Upload Section */}
       <Card>

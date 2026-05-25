@@ -1,7 +1,14 @@
 import logging
 from dataclasses import dataclass, field
 
+from app.realtime.automation_stream_service import emit_email_delivered
+from app.realtime.scan_event_service import (
+    emit_scan_completed,
+    emit_scan_failed,
+    emit_scan_started,
+)
 from app.models.job import JobDocument, ScanFetchResponse
+from app.services.scan_session_service import get_latest_scan_session, get_scan_session_by_scan_id
 from app.models.user_preferences import UserPreferencesDocument
 from app.services.email_service import (
     EmailNotConfiguredError,
@@ -16,6 +23,7 @@ from app.services.job_service import (
     get_latest_scan_jobs,
 )
 from app.services.resume_service import ResumeNotFoundError, get_resume_by_id
+from app.core.user_context import set_request_user
 from app.services.user_preferences_service import mark_email_sent
 
 logger = logging.getLogger(__name__)
@@ -47,6 +55,23 @@ class ScanRunResult:
     manual: bool = False
 
 
+async def _resolve_email_analytics(
+    scan_id: str,
+    fetch_response: ScanFetchResponse | None,
+    *,
+    user_id: str = "",
+):
+    if fetch_response and fetch_response.scan_summary:
+        return fetch_response.scan_summary
+    session = await get_scan_session_by_scan_id(scan_id, user_id=user_id or None)
+    if session:
+        return session.to_summary_detail()
+    latest = await get_latest_scan_session(user_id) if user_id else None
+    if latest and latest.scan_id == scan_id:
+        return latest.to_summary_detail()
+    return None
+
+
 async def _deliver_scan_email(
     preferences: UserPreferencesDocument,
     jobs: list[JobDocument],
@@ -55,6 +80,7 @@ async def _deliver_scan_email(
     *,
     manual: bool,
     last_email_scan_id: str,
+    fetch_response: ScanFetchResponse | None = None,
 ) -> EmailDeliveryResult:
     result = EmailDeliveryResult(to_email=preferences.email)
 
@@ -68,12 +94,19 @@ async def _deliver_scan_email(
         return result
 
     try:
+        analytics = await _resolve_email_analytics(
+            scan_id,
+            fetch_response,
+            user_id=preferences.user_id,
+        )
+
         delivery = send_scan_results_email(
             email=preferences.email,
             jobs=jobs,
             scan_summary=ScanEmailSummary(
                 scan_id=scan_id,
                 scan_timestamp=scan_timestamp,
+                analytics=analytics,
             ),
         )
         result.sent = delivery.sent
@@ -127,6 +160,17 @@ async def _execute_scan(
             manual=manual,
         )
 
+    user_id = preferences.user_id or ""
+    if user_id:
+        set_request_user(user_id, preferences.workspace_id or "")
+
+    if user_id:
+        await emit_scan_started(
+            user_id,
+            manual=manual,
+            preference_id=preferences.id,
+        )
+
     try:
         await get_resume_by_id(preferences.resume_id)
     except ResumeNotFoundError as exc:
@@ -135,6 +179,8 @@ async def _execute_scan(
             preferences.id,
             manual,
         )
+        if user_id:
+            await emit_scan_failed(user_id, reason="resume_not_found", manual=manual)
         raise ScanRunnerError(str(exc)) from exc
 
     try:
@@ -146,6 +192,8 @@ async def _execute_scan(
             exc,
             manual,
         )
+        if user_id:
+            await emit_scan_failed(user_id, reason=str(exc), manual=manual)
         raise ScanRunnerError(str(exc)) from exc
     except JobServiceError as exc:
         logger.error(
@@ -153,6 +201,8 @@ async def _execute_scan(
             preferences.id,
             manual,
         )
+        if user_id:
+            await emit_scan_failed(user_id, reason="job_service_error", manual=manual)
         raise ScanRunnerError(str(exc)) from exc
 
     latest_jobs = await get_latest_scan_jobs()
@@ -163,10 +213,26 @@ async def _execute_scan(
         scan_summary.scan_timestamp,
         manual=manual,
         last_email_scan_id=preferences.last_email_scan_id,
+        fetch_response=scan_summary,
     )
 
     emailed = email_delivery.sent
     skip_reason = email_delivery.skipped_reason
+
+    if user_id:
+        await emit_scan_completed(
+            user_id,
+            scan_id=scan_summary.scan_id,
+            stored=scan_summary.stored,
+            emailed=emailed,
+            manual=manual,
+        )
+        if emailed:
+            await emit_email_delivered(
+                user_id,
+                scan_id=scan_summary.scan_id,
+                to_email=preferences.email,
+            )
 
     logger.info(
         "[SCAN_COMPLETED] preference_id=%s scan_id=%s stored=%d emailed=%s manual=%s",

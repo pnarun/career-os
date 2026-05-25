@@ -2,6 +2,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from app.models.scan_session import ScanSummaryDetail
+
 
 class JobQualityFields(BaseModel):
     """Apply validation and usefulness scoring for automation readiness."""
@@ -166,3 +168,8 @@ class ScanFetchResponse(BaseModel):
     top_jobs_returned: int
     quality_rejected: int = 0
     resume_id: str = ""
+    sources: dict[str, int] = Field(default_factory=dict)
+    failed_sources: list[str] = Field(default_factory=list)
+    source_errors: dict[str, str] = Field(default_factory=dict)
+    provider_status: list[dict] = Field(default_factory=list)
+    scan_summary: ScanSummaryDetail | None = None

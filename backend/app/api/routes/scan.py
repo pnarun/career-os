@@ -1,7 +1,9 @@
 import logging
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
+from app.auth.dependencies import CurrentUser, get_current_user
+from app.core.config import settings
 from app.models.scan import (
     EmailPreviewResponse,
     RunScanNowRequest,
@@ -19,6 +21,10 @@ from app.services.email_service import (
 from app.models.job import JobDocument
 from app.services.job_service import JobServiceError, get_latest_scan_jobs
 from app.services.scan_runner_service import ScanRunnerError, run_scan_now
+from app.services.scan_session_service import (
+    ScanSessionServiceError,
+    get_latest_scan_session,
+)
 from app.services.user_preferences_service import (
     UserPreferencesNotFoundError,
     UserPreferencesServiceError,
@@ -41,10 +47,30 @@ def _latest_scan_meta(jobs: list[JobDocument]) -> tuple[str, str]:
 
 
 @router.post("/run-scan-now", response_model=RunScanNowResponse)
-async def trigger_manual_scan(payload: RunScanNowRequest) -> RunScanNowResponse:
+async def trigger_manual_scan(
+    payload: RunScanNowRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> RunScanNowResponse:
     """Run an immediate scan and send curated opportunity email."""
     try:
-        preferences = await get_preferences_by_id(payload.preferences_id)
+        preferences = await get_preferences_by_id(
+            payload.preferences_id,
+            user_id=current_user.user_id,
+        )
+
+        if settings.QUEUE_SCANS_ENABLED and settings.CELERY_ENABLED:
+            from app.queues.scan_tasks import run_manual_scan_task
+
+            task = run_manual_scan_task.delay(
+                payload.preferences_id,
+                current_user.user_id,
+            )
+            return RunScanNowResponse(
+                status="queued",
+                email_to=preferences.email,
+                task_id=task.id,
+            )
+
         result = await run_scan_now(preferences)
 
         email_error = result.email_result.error or result.email_skipped_reason
@@ -76,12 +102,23 @@ async def trigger_manual_scan(payload: RunScanNowRequest) -> RunScanNowResponse:
 
 
 @router.post("/send-email-now", response_model=SendEmailNowResponse)
-async def send_email_now(payload: SendEmailNowRequest) -> SendEmailNowResponse:
+async def send_email_now(
+    payload: SendEmailNowRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> SendEmailNowResponse:
     """Send email for the latest scan batch without running a new scan."""
     try:
-        preferences = await get_preferences_by_id(payload.preferences_id)
+        preferences = await get_preferences_by_id(
+            payload.preferences_id,
+            user_id=current_user.user_id,
+        )
         jobs = await get_latest_scan_jobs()
         scan_id, scan_timestamp = _latest_scan_meta(jobs)
+
+        analytics = None
+        session = await get_latest_scan_session(current_user.user_id)
+        if session:
+            analytics = session.to_summary_detail()
 
         delivery = send_scan_results_email(
             email=preferences.email,
@@ -89,6 +126,7 @@ async def send_email_now(payload: SendEmailNowRequest) -> SendEmailNowResponse:
             scan_summary=ScanEmailSummary(
                 scan_id=scan_id,
                 scan_timestamp=scan_timestamp,
+                analytics=analytics,
             ),
         )
 
@@ -119,18 +157,25 @@ async def send_email_now(payload: SendEmailNowRequest) -> SendEmailNowResponse:
 @router.get("/email-preview", response_model=EmailPreviewResponse)
 async def email_preview(
     resume_id: str | None = Query(None, description="Optional resume id for context"),
+    current_user: CurrentUser = Depends(get_current_user),
 ) -> EmailPreviewResponse:
     """Return HTML email preview from the latest scan batch without sending."""
-    del resume_id  # latest scan batch is global; resume_id reserved for future scoping
+    del resume_id
 
     try:
         jobs = await get_latest_scan_jobs()
         scan_id, scan_timestamp = _latest_scan_meta(jobs)
 
+        analytics = None
+        session = await get_latest_scan_session(current_user.user_id)
+        if session:
+            analytics = session.to_summary_detail()
+
         preview_html = generate_email_preview(
             jobs,
             scan_timestamp=scan_timestamp,
             scan_id=scan_id,
+            analytics=analytics,
         )
 
         return EmailPreviewResponse(

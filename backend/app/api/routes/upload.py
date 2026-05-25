@@ -9,7 +9,7 @@ from app.services.cloudinary_service import (
     CloudinaryUploadError,
     upload_resume,
 )
-from app.services.resume_parser_service import ResumeParseError, parse_resume_from_url
+from app.services.resume_parser_service import ResumeParseError, parse_resume_from_bytes
 from app.services.resume_service import (
     ResumeServiceError,
     build_resume_create,
@@ -97,9 +97,10 @@ async def upload_resume_endpoint(
         ) from exc
 
     try:
-        parsed_profile = await parse_resume_from_url(
-            upload_result["secure_url"],
+        parsed_profile = await parse_resume_from_bytes(
+            file_data,
             original_filename,
+            upload_result["secure_url"],
         )
     except ResumeParseError as exc:
         logger.error("Resume parsing failed after upload: %s", exc)

@@ -8,6 +8,7 @@ from resend.exceptions import ResendError
 
 from app.core.config import settings
 from app.models.job import JobDocument
+from app.models.scan_session import ScanSummaryDetail
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,7 @@ class EmailNotConfiguredError(EmailServiceError):
 class ScanEmailSummary:
     scan_id: str = ""
     scan_timestamp: str = ""
+    analytics: ScanSummaryDetail | None = None
 
 
 @dataclass
@@ -85,6 +87,99 @@ def _match_badge_color(match_pct: int) -> str:
     if match_pct >= 30:
         return "#f59e0b"
     return "#94a3b8"
+
+
+def _format_source_label(source_key: str) -> str:
+    labels = {
+        "remoteok": "RemoteOK",
+        "arbeitnow": "Arbeitnow",
+        "indeed": "Indeed",
+        "naukri": "Naukri",
+        "instahyre": "Instahyre",
+        "linkedin": "LinkedIn",
+    }
+    return labels.get((source_key or "").lower(), source_key.title() or "Unknown")
+
+
+def _build_email_analytics_html(analytics: ScanSummaryDetail | None) -> str:
+    if not analytics:
+        return ""
+
+    platform_rows = []
+    for source_key, count in sorted(
+        analytics.sources.items(),
+        key=lambda item: -item[1],
+    ):
+        if count <= 0 and source_key not in analytics.failed_sources:
+            continue
+        label = _format_source_label(source_key)
+        platform_rows.append(
+            f"<li style='margin:4px 0;color:#cbd5e1;'>{html.escape(label)}: "
+            f"<strong style='color:#e2e8f0;'>{count}</strong></li>"
+        )
+
+    listed_failures: set[str] = set()
+    for item in analytics.provider_status or []:
+        if not isinstance(item, dict):
+            continue
+        if item.get("status") == "success":
+            continue
+        source_key = str(item.get("source", ""))
+        listed_failures.add(source_key)
+        label = _format_source_label(source_key)
+        error_type = html.escape(str(item.get("error_type", "unknown")))
+        error_message = html.escape(str(item.get("error_message", "Fetch failed")))
+        platform_rows.append(
+            f"<li style='margin:4px 0;color:#fbbf24;'>{html.escape(label)}: "
+            f"<span>{error_type} — {error_message}</span></li>"
+        )
+
+    for failed in analytics.failed_sources:
+        if failed in listed_failures:
+            continue
+        if failed not in analytics.sources or analytics.sources.get(failed, 0) <= 0:
+            label = _format_source_label(failed)
+            detail = html.escape("Fetch failed (no diagnostic recorded)")
+            platform_rows.append(
+                f"<li style='margin:4px 0;color:#fbbf24;'>{html.escape(label)}: "
+                f"<span>{detail}</span></li>"
+            )
+
+    platforms_html = "".join(platform_rows) or (
+        "<li style='color:#94a3b8;'>No platform data for this scan</li>"
+    )
+
+    qualified_line = (
+        f"<p style='margin:12px 0 0;font-size:14px;color:#a5b4fc;font-weight:600;'>"
+        f"Qualified matches found: {analytics.qualified_jobs}</p>"
+        if analytics.qualified_jobs > 0
+        else ""
+    )
+
+    return f"""
+      <tr><td style="padding:0 0 20px;">
+        <table width="100%" cellpadding="0" cellspacing="0" role="presentation"
+          style="background:#1e293b;border:1px solid #334155;border-radius:12px;">
+          <tr><td style="padding:20px;">
+            <p style="margin:0 0 6px;font-size:18px;font-weight:700;color:#f8fafc;">
+              Career Lens Daily Scan Summary
+            </p>
+            <p style="margin:0;font-size:14px;color:#94a3b8;line-height:1.6;">
+              Scanned <strong style="color:#e2e8f0;">{analytics.total_fetched}</strong>
+              jobs across <strong style="color:#e2e8f0;">{analytics.platforms_scanned}</strong>
+              platforms.
+            </p>
+            <p style="margin:14px 0 6px;font-size:13px;font-weight:600;color:#cbd5e1;">
+              Platforms scanned:
+            </p>
+            <ul style="margin:0;padding-left:18px;font-size:13px;">
+              {platforms_html}
+            </ul>
+            {qualified_line}
+          </td></tr>
+        </table>
+      </td></tr>
+    """
 
 
 def _quality_badge_color(score: int) -> str:
@@ -156,12 +251,16 @@ def _build_job_cards_html(jobs: list[JobDocument]) -> str:
             if apply_url and job.has_apply_url and not job.is_suspicious
             else '<span style="color:#64748b;font-size:12px;">Apply link unavailable</span>'
         )
+        source_label = _format_source_label(job.source or "")
         cards.append(
             f"""
             <tr><td style="padding:0 0 16px 0;">
               <table width="100%" cellpadding="0" cellspacing="0" role="presentation"
                 style="background:#1e293b;border:1px solid #334155;border-radius:12px;">
                 <tr><td style="padding:18px 20px;">
+                  <span style="display:inline-block;margin-bottom:8px;padding:3px 10px;
+                    border-radius:999px;font-size:11px;font-weight:600;
+                    background:#312e81;color:#c7d2fe;">Source: {html.escape(source_label)}</span>
                   <span style="color:#64748b;font-size:11px;font-weight:600;">#{index}</span>
                   <h3 style="margin:6px 0 4px;font-size:17px;font-weight:600;color:#f8fafc;">
                     {html.escape(job.title)}
@@ -215,7 +314,10 @@ def build_opportunities_email(
         + "\n— Career OS"
     )
 
+    analytics_block = _build_email_analytics_html(scan_summary.analytics)
+
     inner = f"""
+      {analytics_block}
       <tr><td style="padding:20px 0 8px;">
         <p style="margin:0 0 4px;font-size:16px;font-weight:600;color:#e2e8f0;">
           Curated opportunities for you
@@ -246,30 +348,49 @@ def build_opportunities_email(
 
 def build_no_match_email(scan_summary: ScanEmailSummary) -> EmailBuildResult:
     scan_label = scan_summary.scan_timestamp or "today"
+    analytics = scan_summary.analytics
+
+    platform_text = ""
+    if analytics:
+        lines = [
+            f"- {_format_source_label(k)}: {v}"
+            for k, v in sorted(analytics.sources.items(), key=lambda x: -x[1])
+            if v > 0
+        ]
+        for item in analytics.provider_status or []:
+            if not isinstance(item, dict) or item.get("status") == "success":
+                continue
+            label = _format_source_label(str(item.get("source", "")))
+            err = item.get("error_type", "unknown")
+            msg = item.get("error_message", "")
+            lines.append(f"- {label}: {err} — {msg}")
+        for failed in analytics.failed_sources:
+            if any(
+                isinstance(p, dict) and p.get("source") == failed
+                for p in (analytics.provider_status or [])
+            ):
+                continue
+            lines.append(f"- {_format_source_label(failed)}: fetch failed")
+        platform_text = "\n".join(lines)
 
     text_body = (
         f"{SUBJECT_NO_MATCH}\n\n"
-        "We scanned engineering opportunities for your profile today, "
-        "but no strong matches were found.\n\n"
-        "No worries — Career OS will continue searching "
-        "for better opportunities automatically.\n\n"
+        "Career Lens Daily Scan Summary\n\n"
+        f"{platform_text}\n\n"
+        "No strong matches were found today, but Career Lens continues scanning "
+        "India and remote engineering opportunities intelligently for you.\n\n"
         f"Scan: {scan_label}\n"
-        "— Career OS"
+        "— Career Lens"
     )
 
+    analytics_block = _build_email_analytics_html(analytics)
+
     inner = f"""
-      <tr><td style="padding:28px 0;">
-        <p style="margin:0 0 12px;font-size:16px;font-weight:600;color:#e2e8f0;">
-          Daily scan complete
-        </p>
-        <p style="margin:0 0 16px;font-size:14px;color:#cbd5e1;line-height:1.7;">
-          We scanned engineering opportunities for your profile
-          <strong style="color:#e2e8f0;">{html.escape(scan_label)}</strong>,
-          but no strong matches were found.
-        </p>
-        <p style="margin:0;font-size:14px;color:#94a3b8;line-height:1.7;">
-          No worries — Career OS will continue searching for better
-          opportunities automatically 🚀
+      {analytics_block}
+      <tr><td style="padding:8px 0 24px;">
+        <p style="margin:0;font-size:14px;color:#cbd5e1;line-height:1.75;">
+          No strong matches were found today, but Career Lens continues scanning
+          India and remote engineering opportunities intelligently for you 🚀
         </p>
       </td></tr>
     """
@@ -288,9 +409,14 @@ def build_scan_email(
     scan_timestamp: str = "",
     scan_id: str = "",
     recipient_email: str = "",
+    analytics: ScanSummaryDetail | None = None,
 ) -> EmailBuildResult:
     """Build email content for preview (opportunities or no-match)."""
-    summary = ScanEmailSummary(scan_id=scan_id, scan_timestamp=scan_timestamp)
+    summary = ScanEmailSummary(
+        scan_id=scan_id,
+        scan_timestamp=scan_timestamp,
+        analytics=analytics,
+    )
     if jobs:
         return build_opportunities_email(jobs, summary, recipient_email)
     return build_no_match_email(summary)
@@ -300,9 +426,10 @@ def generate_email_preview(
     jobs: list[JobDocument],
     scan_timestamp: str = "",
     scan_id: str = "",
+    analytics: ScanSummaryDetail | None = None,
 ) -> str:
     logger.info("[EMAIL_GENERATION_STARTED] preview jobs=%d", len(jobs))
-    built = build_scan_email(jobs, scan_timestamp, scan_id)
+    built = build_scan_email(jobs, scan_timestamp, scan_id, analytics=analytics)
     logger.info(
         "[EMAIL_PREVIEW_GENERATED] type=%s jobs=%d",
         built.email_type,
@@ -362,6 +489,36 @@ def _dispatch_resend(
     except Exception as exc:
         logger.exception("[EMAIL_SENT_FAILURE] to=%s", recipient)
         raise EmailServiceError(f"Failed to send email via Resend: {exc}") from exc
+
+
+def send_password_reset_otp(email: str, otp: str) -> None:
+    """Send a 6-digit password reset code."""
+    recipient = email.strip().lower()
+    subject = "Career OS — Password reset code"
+    text_body = (
+        f"Your Career OS password reset code is: {otp}\n\n"
+        "This code expires in 10 minutes. If you did not request this, ignore this email."
+    )
+    html_body = (
+        f"<p>Your Career OS password reset code is:</p>"
+        f"<p style='font-size:28px;font-weight:bold;letter-spacing:4px'>{html.escape(otp)}</p>"
+        f"<p>This code expires in 10 minutes.</p>"
+    )
+    api_key, from_email = _ensure_configured()
+    _configure_resend(api_key)
+    try:
+        resend.Emails.send(
+            {
+                "from": from_email,
+                "to": [recipient],
+                "subject": subject,
+                "html": html_body,
+                "text": text_body,
+            }
+        )
+        logger.info("[PASSWORD_RESET_OTP_SENT] to=%s", recipient)
+    except ResendError as exc:
+        raise EmailServiceError(str(exc)) from exc
 
 
 def send_scan_results_email(

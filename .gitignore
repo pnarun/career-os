@@ -1,7 +1,11 @@
-# Environment
+# Environment — never commit secrets or environment-specific values
 .env
 .env.local
 .env.*.local
+backend/.env
+backend/.env.development
+backend/.env.production
+backend/.env.staging
 
 # Python
 __pycache__/
@@ -31,5 +35,27 @@ Thumbs.db
 backend/playwright-report/
 backend/test-results/
 
+# Browser automation — local session state (never commit)
+backend/app/automation/profiles/sessions/**
+!backend/app/automation/profiles/sessions/
+!backend/app/automation/profiles/sessions/.gitkeep
+backend/app/automation/profiles/apply_flags/**
+!backend/app/automation/profiles/apply_flags/
+!backend/app/automation/profiles/apply_flags/.gitkeep
+backend/app/automation/profiles/*_session.json
+backend/app/automation/profiles/.prepare_done_*.flag
+backend/app/automation/profiles/.open_done_*.flag
+backend/app/automation/profiles/.apply_cancel_*.flag
+backend/app/automation/profiles/session_metadata.json
+backend/app/automation/logs/screenshots/
+backend/app/automation/temp/*
+!backend/app/automation/temp/.gitkeep
+!backend/app/automation/profiles/.gitkeep
+!backend/app/automation/logs/.gitkeep
+
 # Logs
 *.log
+
+# Test / cache
+backend/.pytest_cache/
+.pytest_cache/

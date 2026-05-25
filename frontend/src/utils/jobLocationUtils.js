@@ -163,6 +163,18 @@ export function getSourceBadgeStyle(sourceKey) {
   if (key === "arbeitnow") {
     return "border-cyan-500/30 bg-cyan-500/10 text-cyan-400"
   }
+  if (key === "indeed") {
+    return "border-blue-500/30 bg-blue-500/10 text-blue-400"
+  }
+  if (key === "naukri") {
+    return "border-orange-500/30 bg-orange-500/10 text-orange-400"
+  }
+  if (key === "instahyre") {
+    return "border-violet-500/30 bg-violet-500/10 text-violet-400"
+  }
+  if (key === "linkedin") {
+    return "border-sky-500/30 bg-sky-500/10 text-sky-400"
+  }
   return "border-border bg-muted text-muted-foreground"
 }
 

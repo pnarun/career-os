@@ -1,1 +1,1 @@
-"""Playwright browser automation domain (not implemented yet)."""
+"""Playwright browser automation domain (infrastructure foundation)."""

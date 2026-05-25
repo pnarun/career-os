@@ -11,24 +11,79 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+    restart: unless-stopped
 
-  backend:
+  backend-api:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: career-os-backend
+    container_name: career-os-backend-api
     ports:
       - "8000:8000"
     environment:
+      ENVIRONMENT: ${ENVIRONMENT:-development}
       REDIS_URL: redis://redis:6379/0
+      REDIS_ENABLED: "true"
       MONGO_URI: ${MONGO_URI:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-me}
     depends_on:
       redis:
         condition: service_healthy
     profiles:
       - full
+      - staging
+      - production
+
+  worker-engine:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: career-os-worker
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_ENABLED: "true"
+      MONGO_URI: ${MONGO_URI:-}
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: celery -A app.core.celery_app:celery_app worker -Q scans,email,ai,analytics,maintenance,default -l info
+    profiles:
+      - full
+      - staging
+      - production
+
+  scheduler:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: career-os-scheduler
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_ENABLED: "true"
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: celery -A app.core.celery_app:celery_app beat -l info
+    profiles:
+      - full
+      - staging
+      - production
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: career-os-frontend
+    ports:
+      - "5173:80"
+    profiles:
+      - full
+      - staging
+      - production
 
 volumes:
   redis_data:

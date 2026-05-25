@@ -1,0 +1,30 @@
+{
+  "linkedin": {
+    "exists": false,
+    "cookie_count": 0,
+    "storage_size_kb": 0,
+    "status": "none",
+    "last_saved_at": null
+  },
+  "naukri": {
+    "exists": false,
+    "cookie_count": 0,
+    "storage_size_kb": 0,
+    "status": "none",
+    "last_saved_at": null
+  },
+  "indeed": {
+    "exists": false,
+    "cookie_count": 0,
+    "storage_size_kb": 0,
+    "status": "none",
+    "last_saved_at": null
+  },
+  "instahyre": {
+    "exists": false,
+    "cookie_count": 0,
+    "storage_size_kb": 0,
+    "status": "none",
+    "last_saved_at": null
+  }
+}

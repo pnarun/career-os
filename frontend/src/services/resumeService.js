@@ -1,5 +1,4 @@
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8001"
+import { apiFetch, parseErrorMessage } from "@/lib/apiClient"
 
 const ALLOWED_EXTENSIONS = [".pdf", ".docx"]
 const ALLOWED_MIME_TYPES = [
@@ -29,33 +28,6 @@ export function validateResumeFile(file) {
 }
 
 /**
- * @param {Response} response
- * @returns {Promise<string>}
- */
-async function parseErrorMessage(response) {
-  try {
-    const data = await response.json()
-    const detail = data?.detail
-
-    if (typeof detail === "string") {
-      return detail
-    }
-
-    if (detail?.message) {
-      return detail.message
-    }
-
-    if (Array.isArray(detail) && detail[0]?.msg) {
-      return detail[0].msg
-    }
-
-    return data?.message ?? `Request failed (${response.status})`
-  } catch {
-    return `Request failed (${response.status})`
-  }
-}
-
-/**
  * Upload a resume and return parsed intelligence from the backend.
  *
  * @param {File} file
@@ -73,7 +45,7 @@ export async function uploadResume(file, callbacks = {}) {
 
   callbacks.onUploading?.()
 
-  const response = await fetch(`${API_BASE_URL}/upload-resume`, {
+  const response = await apiFetch(`/upload-resume`, {
     method: "POST",
     body: formData,
   })

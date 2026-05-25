@@ -1,7 +1,7 @@
 import logging
 from typing import TypedDict
 
-from app.utils.skills_master import extract_skills_from_text
+from app.services.job_match_scoring_service import JobMatchResult, ResumeProfile, score_resume_against_job
 
 logger = logging.getLogger(__name__)
 
@@ -12,62 +12,50 @@ class MatchAnalysis(TypedDict):
     missing_skills: list[str]
     job_skills: list[str]
     recommendation: str
-
-
-def _recommendation_for_score(match_percentage: int) -> str:
-    if match_percentage >= 90:
-        return "Excellent Match"
-    if match_percentage >= 75:
-        return "Strong Match"
-    if match_percentage >= 50:
-        return "Moderate Match"
-    return "Weak Match"
-
-
-def _normalize_skill_map(skills: list[str]) -> dict[str, str]:
-    """Map lowercase skill name to canonical display value."""
-    return {skill.lower(): skill for skill in skills}
+    strengths: list[str]
+    recommendations: list[str]
+    experience_alignment: str
+    career_fit: str
+    why_match: list[str]
+    match_breakdown: dict
 
 
 def match_resume_to_job(
     resume_skills: list[str],
     job_description: str,
+    *,
+    job_title: str = "",
+    job_location: str = "",
+    job_remote: bool = False,
+    resume_keywords: list[str] | None = None,
+    resume_raw_text: str = "",
 ) -> MatchAnalysis:
-    """Compare resume skills against skills extracted from a job description."""
-    job_skills = extract_skills_from_text(job_description)
-
-    resume_map = _normalize_skill_map(resume_skills)
-    job_map = _normalize_skill_map(job_skills)
-
-    matched_skills = sorted(
-        [resume_map[key] for key in job_map if key in resume_map],
-        key=str.lower,
-    )
-    missing_skills = sorted(
-        [job_map[key] for key in job_map if key not in resume_map],
-        key=str.lower,
-    )
-
-    if job_skills:
-        match_percentage = round((len(matched_skills) / len(job_skills)) * 100)
-    else:
-        match_percentage = 0
-
-    match_percentage = max(0, min(100, match_percentage))
-    recommendation = _recommendation_for_score(match_percentage)
-
-    logger.info(
-        "Match analysis: score=%d matched=%d missing=%d job_skills=%d",
-        match_percentage,
-        len(matched_skills),
-        len(missing_skills),
-        len(job_skills),
+    """Compare resume profile against a job using weighted match scoring v2."""
+    result: JobMatchResult = score_resume_against_job(
+        ResumeProfile(
+            skills=resume_skills,
+            experience_keywords=resume_keywords or [],
+            raw_text=resume_raw_text,
+            links=[],
+        ),
+        {
+            "title": job_title,
+            "description": job_description,
+            "location": job_location,
+            "remote": job_remote,
+        },
     )
 
     return MatchAnalysis(
-        match_percentage=match_percentage,
-        matched_skills=matched_skills,
-        missing_skills=missing_skills,
-        job_skills=job_skills,
-        recommendation=recommendation,
+        match_percentage=result["match_score"],
+        matched_skills=result["matched_skills"],
+        missing_skills=result["missing_skills"],
+        job_skills=result["job_skills"],
+        recommendation=result["recommendation"],
+        strengths=result["strengths"],
+        recommendations=result["recommendations"],
+        experience_alignment=result["experience_alignment"],
+        career_fit=result["career_fit"],
+        why_match=result["why_match"],
+        match_breakdown=result["match_breakdown"],
     )

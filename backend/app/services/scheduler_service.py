@@ -4,8 +4,13 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
+from app.services.automation.job_scan_automation_service import (
+    run_daily_job_scan_automation,
+    run_follow_up_reminders,
+    run_interview_reminders,
+    run_weekly_career_insights,
+)
 from app.models.user_preferences import UserPreferencesDocument
-from app.services.scan_runner_service import ScanRunnerError, run_scan_for_user
 from app.services.user_preferences_service import (
     UserPreferencesServiceError,
     get_active_preferences,
@@ -60,8 +65,8 @@ async def _execute_scheduled_scan(preference_id: str) -> None:
                 preference_id,
             )
             return
-        await run_scan_for_user(preferences)
-    except (ScanRunnerError, UserPreferencesServiceError) as exc:
+        await run_daily_job_scan_automation(preference_id)
+    except UserPreferencesServiceError as exc:
         logger.error(
             "[SCHEDULED_SCAN_FAILED] preference_id=%s error=%s",
             preference_id,
@@ -136,12 +141,65 @@ async def reload_active_schedules() -> int:
     return len(preferences_list)
 
 
+async def _execute_follow_up_reminders() -> None:
+    try:
+        await run_follow_up_reminders()
+    except Exception as exc:
+        logger.error("[FOLLOW_UP_REMINDERS_FAILED] error=%s", exc)
+
+
+async def _execute_interview_reminders() -> None:
+    try:
+        await run_interview_reminders()
+    except Exception as exc:
+        logger.error("[INTERVIEW_REMINDERS_FAILED] error=%s", exc)
+
+
+async def _execute_weekly_insights() -> None:
+    try:
+        await run_weekly_career_insights()
+    except Exception as exc:
+        logger.error("[WEEKLY_INSIGHTS_FAILED] error=%s", exc)
+
+
+def _register_system_jobs() -> None:
+    """Register global automation jobs (reminders, weekly insights)."""
+    scheduler = get_scheduler()
+
+    scheduler.add_job(
+        _execute_follow_up_reminders,
+        trigger=CronTrigger(hour=9, minute=0, timezone="UTC"),
+        id="follow_up_reminders",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+    scheduler.add_job(
+        _execute_interview_reminders,
+        trigger=CronTrigger(hour=8, minute=30, timezone="UTC"),
+        id="interview_reminders",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+    scheduler.add_job(
+        _execute_weekly_insights,
+        trigger=CronTrigger(day_of_week="sun", hour=10, minute=0, timezone="UTC"),
+        id="weekly_career_insights",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+    logger.info("System automation jobs registered")
+
+
 async def start_scheduler() -> None:
     """Start APScheduler and register active preference jobs."""
     scheduler = get_scheduler()
     if not scheduler.running:
         scheduler.start()
         logger.info("APScheduler started")
+    _register_system_jobs()
     await reload_active_schedules()
 
 

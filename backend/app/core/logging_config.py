@@ -1,0 +1,62 @@
+"""Structured JSON logging for production observability."""
+
+from __future__ import annotations
+
+import json
+import logging
+import sys
+from datetime import datetime, timezone
+from typing import Any
+
+
+class StructuredFormatter(logging.Formatter):
+    """Emit one JSON object per log line."""
+
+    def __init__(self, service: str = "career-os-api") -> None:
+        super().__init__()
+        self.service = service
+
+    def format(self, record: logging.LogRecord) -> str:
+        payload: dict[str, Any] = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "service": getattr(record, "service", self.service),
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+            "event": getattr(record, "event", record.funcName or "log"),
+        }
+
+        for key in ("provider", "status", "user_id", "scan_id", "task_id", "queue"):
+            value = getattr(record, key, None)
+            if value is not None:
+                payload[key] = value
+
+        if record.exc_info:
+            payload["exception"] = self.formatException(record.exc_info)
+
+        return json.dumps(payload, default=str)
+
+
+def configure_logging(*, service: str = "career-os-api", level: str = "INFO") -> None:
+    root = logging.getLogger()
+    root.handlers.clear()
+    root.setLevel(getattr(logging, level.upper(), logging.INFO))
+
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(StructuredFormatter(service=service))
+    root.addHandler(handler)
+
+    for name in ("urllib3", "httpx", "httpcore", "apscheduler", "motor"):
+        logging.getLogger(name).setLevel(logging.WARNING)
+
+
+def log_event(
+    logger: logging.Logger,
+    level: int,
+    event: str,
+    message: str,
+    **fields: Any,
+) -> None:
+    """Log with structured extra fields."""
+    extra = {"event": event, **fields}
+    logger.log(level, message, extra=extra)

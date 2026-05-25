@@ -1,7 +1,8 @@
 import logging
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
+from app.auth.dependencies import CurrentUser, get_current_user
 from app.models.user_preferences import (
     UserPreferencesCreate,
     UserPreferencesDocument,
@@ -24,9 +25,14 @@ router = APIRouter(tags=["preferences"])
 @router.post("/preferences", response_model=UserPreferencesDocument)
 async def create_preferences(
     payload: UserPreferencesCreate,
+    current_user: CurrentUser = Depends(get_current_user),
 ) -> UserPreferencesDocument:
     try:
-        saved = await save_preferences(payload)
+        saved = await save_preferences(
+            payload,
+            user_id=current_user.user_id,
+            workspace_id=current_user.workspace_id,
+        )
         await sync_preference_schedule(saved)
         return saved
     except UserPreferencesServiceError as exc:
@@ -40,9 +46,11 @@ async def create_preferences(
 
 
 @router.get("/preferences", response_model=UserPreferencesDocument | None)
-async def read_preferences() -> UserPreferencesDocument | None:
+async def read_preferences(
+    current_user: CurrentUser = Depends(get_current_user),
+) -> UserPreferencesDocument | None:
     try:
-        return await get_preferences()
+        return await get_preferences(current_user.user_id)
     except UserPreferencesServiceError as exc:
         raise HTTPException(status_code=503, detail={"message": str(exc)}) from exc
     except Exception as exc:
@@ -57,9 +65,14 @@ async def read_preferences() -> UserPreferencesDocument | None:
 async def patch_preferences(
     payload: UserPreferencesUpdate,
     preference_id: str = Query(..., description="MongoDB preferences document id"),
+    current_user: CurrentUser = Depends(get_current_user),
 ) -> UserPreferencesDocument:
     try:
-        updated = await update_preferences(preference_id, payload)
+        updated = await update_preferences(
+            preference_id,
+            payload,
+            user_id=current_user.user_id,
+        )
         await sync_preference_schedule(updated)
         return updated
     except UserPreferencesNotFoundError as exc:

@@ -7,12 +7,15 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import { cn } from "@/lib/utils"
 
 type StatCardProps = {
   title: string
   value: string
   description: string
   icon: LucideIcon
+  onClick?: () => void
+  accent?: string
 }
 
 export function StatCard({
@@ -20,13 +23,35 @@ export function StatCard({
   value,
   description,
   icon: Icon,
+  onClick,
+  accent,
 }: StatCardProps) {
+  const clickable = Boolean(onClick)
+
   return (
-    <Card>
+    <Card
+      className={cn(
+        "transition-colors",
+        clickable && "cursor-pointer hover:border-primary/40 hover:bg-muted/30"
+      )}
+      onClick={onClick}
+      role={clickable ? "button" : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onKeyDown={
+        clickable
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault()
+                onClick?.()
+              }
+            }
+          : undefined
+      }
+    >
       <CardHeader className="flex flex-row items-start justify-between space-y-0">
         <div className="space-y-1">
           <CardDescription>{title}</CardDescription>
-          <CardTitle className="text-2xl font-semibold tabular-nums">
+          <CardTitle className={cn("text-2xl font-semibold tabular-nums", accent)}>
             {value}
           </CardTitle>
         </div>

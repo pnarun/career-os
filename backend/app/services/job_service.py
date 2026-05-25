@@ -4,11 +4,30 @@ from typing import Any
 
 from motor.motor_asyncio import AsyncIOMotorCollection
 
+from app.realtime.provider_status_stream import emit_provider_status
+from app.realtime.scan_event_service import emit_ai_scoring_complete, emit_jobs_fetched
 from app.core.database import get_database
+from app.core.user_context import get_request_user_id, get_request_workspace_id
+from app.automation.browser.session_status_service import is_session_ready
 from app.models.job import JobCreate, JobDocument, JobHistoryItem, ScanFetchResponse
+from app.models.unified_feed import UnifiedFeedResponse
+from app.models.linkedin_fetch import LinkedInFetchResponse
+from app.services.unified_feed_service import (
+    SortOption,
+    build_unified_feed_from_documents,
+    get_feed_metadata_from_latest_scan,
+)
 from app.services.job_fetch_service import fetch_public_jobs_async
+from app.services.job_filter_service import filter_normalized_jobs
+from app.services.job_sources.linkedin_playwright_source import (
+    LinkedInPlaywrightJobSource,
+)
+from app.services.job_sources.linkedin_search_context import build_search_keywords
+from app.services.scan_analytics_service import build_scan_summary
+from app.services.scan_session_service import save_scan_session
 from app.services.job_quality_service import filter_jobs_by_quality
 from app.services.match_engine_service import match_resume_to_job
+from app.services.job_match_scoring_service import ResumeProfile
 from app.services.resume_service import (
     ResumeNotFoundError,
     get_all_resumes,
@@ -52,6 +71,20 @@ def _get_jobs_collection() -> AsyncIOMotorCollection:
     return get_database()[JOBS_COLLECTION]
 
 
+def _scoped_query(extra: dict[str, Any] | None = None) -> dict[str, Any]:
+    query: dict[str, Any] = dict(extra or {})
+    user_id = get_request_user_id()
+    if user_id:
+        query["user_id"] = user_id
+    return query
+
+
+async def ensure_job_indexes() -> None:
+    collection = _get_jobs_collection()
+    await collection.create_index("user_id")
+    await collection.create_index([("user_id", 1), ("is_latest_scan", 1)])
+
+
 def _document_from_create(job_data: JobCreate) -> dict[str, Any]:
     return {
         "title": job_data.title,
@@ -79,6 +112,13 @@ def _document_from_create(job_data: JobCreate) -> dict[str, Any]:
         "quality_flags": job_data.quality_flags,
         "created_at": _utc_now_iso(),
     }
+    user_id = get_request_user_id()
+    if user_id:
+        document["user_id"] = user_id
+        workspace_id = get_request_workspace_id()
+        if workspace_id:
+            document["workspace_id"] = workspace_id
+    return document
 
 
 def build_job_create(
@@ -138,7 +178,14 @@ def rank_job_candidate(
         "matched_skills": match_analysis["matched_skills"],
         "missing_skills": match_analysis["missing_skills"],
         "match_percentage": match_analysis["match_percentage"],
+        "match_score": match_analysis["match_percentage"],
         "recommendation": match_analysis["recommendation"],
+        "strengths": match_analysis.get("strengths", []),
+        "recommendations": match_analysis.get("recommendations", []),
+        "experience_alignment": match_analysis.get("experience_alignment", ""),
+        "career_fit": match_analysis.get("career_fit", ""),
+        "why_match": match_analysis.get("why_match", []),
+        "match_breakdown": match_analysis.get("match_breakdown", {}),
     }
 
 
@@ -147,7 +194,7 @@ async def start_new_scan_session() -> None:
     try:
         collection = _get_jobs_collection()
         result = await collection.update_many(
-            {"is_latest_scan": True},
+            _scoped_query({"is_latest_scan": True}),
             {"$set": {"is_latest_scan": False, "already_seen": True}},
         )
         if result.modified_count:
@@ -171,15 +218,19 @@ async def was_job_already_shown(
     try:
         collection = _get_jobs_collection()
         if apply_url.strip():
-            existing = await collection.find_one({"apply_url": apply_url.strip()})
+            existing = await collection.find_one(
+                _scoped_query({"apply_url": apply_url.strip()})
+            )
             if existing:
                 return True
 
         existing = await collection.find_one(
-            {
-                "title": title.strip(),
-                "company": company.strip(),
-            }
+            _scoped_query(
+                {
+                    "title": title.strip(),
+                    "company": company.strip(),
+                }
+            )
         )
         return existing is not None
     except RuntimeError as exc:
@@ -211,12 +262,67 @@ async def save_job(job_data: JobCreate) -> JobDocument:
         raise JobServiceError("Failed to save job") from exc
 
 
+async def get_unified_jobs_feed(
+    *,
+    providers: list[str] | None = None,
+    remote_only: bool = False,
+    easy_apply_only: bool = False,
+    min_match: int | None = None,
+    keyword: str | None = None,
+    sort_by: str = "default",
+    strong_matches_only: bool = False,
+    remote_high_match: bool = False,
+    easy_apply_high_match: bool = False,
+) -> UnifiedFeedResponse:
+    """Build unified feed from the latest stored scan batch."""
+    jobs = await get_latest_scan_jobs()
+    provider_counts, duplicates_removed, scan_id, scan_timestamp = (
+        await get_feed_metadata_from_latest_scan()
+    )
+    sort_key: SortOption = sort_by if sort_by in {
+        "match",
+        "quality",
+        "source_priority",
+        "newest",
+        "default",
+    } else "default"
+
+    resume_profile: ResumeProfile | None = None
+    resumes = await get_all_resumes()
+    if resumes:
+        latest = resumes[0]
+        resume_profile = ResumeProfile(
+            skills=latest.skills,
+            experience_keywords=latest.experience_keywords,
+            links=latest.links,
+            raw_text=latest.raw_text,
+        )
+
+    return await build_unified_feed_from_documents(
+        jobs,
+        provider_raw_counts=provider_counts,
+        duplicates_removed=duplicates_removed,
+        scan_id=scan_id,
+        scan_timestamp=scan_timestamp,
+        resume_profile=resume_profile,
+        providers=providers,
+        remote_only=remote_only,
+        easy_apply_only=easy_apply_only,
+        min_match=min_match,
+        keyword=keyword,
+        sort_by=sort_key,
+        strong_matches_only=strong_matches_only,
+        remote_high_match=remote_high_match,
+        easy_apply_high_match=easy_apply_high_match,
+    )
+
+
 async def get_latest_scan_jobs() -> list[JobDocument]:
     """Return only the current latest scan batch (max 50), prioritized."""
     try:
         collection = _get_jobs_collection()
         cursor = (
-            collection.find({"is_latest_scan": True})
+            collection.find(_scoped_query({"is_latest_scan": True}))
             .sort(JOB_SORT_ORDER)
             .limit(SCAN_BATCH_LIMIT)
         )
@@ -234,7 +340,7 @@ async def get_job_history(limit: int = HISTORY_DEBUG_LIMIT) -> list[JobHistoryIt
     """Return recent job history for debug (ignores scan session flags)."""
     try:
         collection = _get_jobs_collection()
-        cursor = collection.find({}).sort("created_at", -1).limit(limit)
+        cursor = collection.find(_scoped_query()).sort("created_at", -1).limit(limit)
         documents = await cursor.to_list(length=limit)
         return [JobHistoryItem.from_mongo(doc) for doc in documents]
     except RuntimeError as exc:
@@ -248,7 +354,7 @@ async def get_all_jobs() -> list[JobDocument]:
     """Return full job history (admin/debug use)."""
     try:
         collection = _get_jobs_collection()
-        cursor = collection.find({}).sort(JOB_SORT_ORDER)
+        cursor = collection.find(_scoped_query()).sort(JOB_SORT_ORDER)
         documents = await cursor.to_list(length=None)
         jobs = [JobDocument.from_mongo(doc) for doc in documents]
         return sort_job_documents(jobs)
@@ -285,8 +391,52 @@ async def discover_and_store_jobs(resume_id: str | None = None) -> ScanFetchResp
 
     await start_new_scan_session()
 
-    normalized_jobs, filtered_out = await fetch_public_jobs_async()
-    raw_fetched = len(normalized_jobs) + filtered_out
+    fetch_result = await fetch_public_jobs_async()
+    normalized_jobs = fetch_result.jobs
+    filtered_out = fetch_result.filtered_rejected
+    aggregation = fetch_result.aggregation
+    pre_filter_jobs = fetch_result.pre_filter_jobs
+    raw_fetched = aggregation.total_fetched
+
+    user_id = get_request_user_id() or ""
+    if user_id:
+        for provider, count in (aggregation.sources or {}).items():
+            status = "failed" if provider in aggregation.failed_sources else "success"
+            if status == "success":
+                await emit_jobs_fetched(
+                    user_id,
+                    provider=provider,
+                    count=int(count or 0),
+                    scan_id=scan_id,
+                )
+            else:
+                await emit_provider_status(
+                    user_id,
+                    provider=provider,
+                    status="failed",
+                    count=int(count or 0),
+                    error=aggregation.source_errors.get(provider, ""),
+                    scan_id=scan_id,
+                )
+        if "linkedin" not in aggregation.sources:
+            linkedin_meta = fetch_result.linkedin_fetch or {}
+            linkedin_status = linkedin_meta.get("status", "")
+            linkedin_count = int(linkedin_meta.get("count") or linkedin_meta.get("jobs_count") or 0)
+            if linkedin_status == "success" and linkedin_count:
+                await emit_jobs_fetched(
+                    user_id,
+                    provider="linkedin",
+                    count=linkedin_count,
+                    scan_id=scan_id,
+                )
+            elif linkedin_status and linkedin_status != "success":
+                await emit_provider_status(
+                    user_id,
+                    provider="linkedin",
+                    status="failed",
+                    error=str(linkedin_meta.get("error") or "LinkedIn fetch failed"),
+                    scan_id=scan_id,
+                )
 
     latest_resume = await _resolve_resume_for_scan(resume_id)
     skipped_already_shown = 0
@@ -303,7 +453,17 @@ async def discover_and_store_jobs(resume_id: str | None = None) -> ScanFetchResp
             continue
 
         description = job["description"] or f"{job['title']} at {job['company']}"
-        analysis = match_resume_to_job(latest_resume.skills, description)
+        analysis = match_resume_to_job(
+            latest_resume.skills,
+            description,
+            job_title=job["title"],
+            job_location=job.get("location", ""),
+            job_remote=bool(
+                job.get("remote_priority") or (job.get("job_type") or "").lower() == "remote"
+            ),
+            resume_keywords=latest_resume.experience_keywords,
+            resume_raw_text=latest_resume.raw_text,
+        )
         matched_candidates.append(rank_job_candidate(job, analysis))
 
     ranked_candidates, quality_rejected = filter_jobs_by_quality(matched_candidates)
@@ -336,12 +496,40 @@ async def discover_and_store_jobs(resume_id: str | None = None) -> ScanFetchResp
         await save_job(job_payload)
         stored_count += 1
 
+    scan_summary = build_scan_summary(
+        aggregation=aggregation,
+        pre_filter_jobs=pre_filter_jobs,
+        qualified_jobs=stored_count,
+        filtered_rejected=filtered_out,
+        quality_rejected=quality_rejected,
+    )
+
+    try:
+        await save_scan_session(
+            scan_id,
+            scan_timestamp,
+            scan_summary,
+            resume_id=latest_resume.id,
+            user_id=get_request_user_id() or "",
+            workspace_id=get_request_workspace_id() or "",
+        )
+    except Exception:
+        logger.exception("Failed to persist scan session analytics (scan continues)")
+
     logger.info(
         "Scan %s complete: stored=%d skipped_history=%d",
         scan_id,
         stored_count,
         skipped_already_shown,
     )
+
+    if user_id:
+        await emit_ai_scoring_complete(
+            user_id,
+            scan_id=scan_id,
+            stored=stored_count,
+            matched=len(matched_candidates),
+        )
 
     return ScanFetchResponse(
         scan_id=scan_id,
@@ -354,4 +542,134 @@ async def discover_and_store_jobs(resume_id: str | None = None) -> ScanFetchResp
         top_jobs_returned=stored_count,
         quality_rejected=quality_rejected,
         resume_id=latest_resume.id,
+        sources=aggregation.sources,
+        failed_sources=aggregation.failed_sources,
+        source_errors=dict(aggregation.source_errors),
+        provider_status=list(scan_summary.provider_status),
+        scan_summary=scan_summary,
+    )
+
+
+async def fetch_and_merge_linkedin_jobs(
+    resume_id: str | None = None,
+) -> LinkedInFetchResponse:
+    """
+    Headless LinkedIn discovery using saved session; merge into the latest scan feed.
+    """
+    if not is_session_ready("linkedin"):
+        return LinkedInFetchResponse(
+            status="session_invalid",
+            message="LinkedIn session not ready. Prepare a session on the Automation page.",
+            session_valid=False,
+        )
+
+    resume = await _resolve_resume_for_scan(resume_id)
+    search_keywords = build_search_keywords(resume)
+
+    adapter = LinkedInPlaywrightJobSource()
+    try:
+        result = await adapter.fetch_jobs(resume_id=resume.id)
+    except Exception as exc:
+        logger.exception("LinkedIn fetch failed")
+        return LinkedInFetchResponse(
+            status="error",
+            message=str(exc),
+            session_valid=True,
+            search_keywords=search_keywords,
+        )
+
+    if result.error:
+        session_invalid = "session" in result.error.lower()
+        return LinkedInFetchResponse(
+            status="session_invalid" if session_invalid else "error",
+            message=result.error,
+            session_valid=not session_invalid,
+            search_keywords=search_keywords,
+        )
+
+    pipeline = [job.to_pipeline_dict() for job in result.jobs]
+    filtered_jobs, filtered_out = filter_normalized_jobs(pipeline)
+
+    latest_batch = await get_latest_scan_jobs()
+    if latest_batch:
+        scan_id = latest_batch[0].scan_id or generate_scan_id()
+        scan_timestamp = latest_batch[0].scan_timestamp or _utc_now_iso()
+    else:
+        scan_id = generate_scan_id()
+        scan_timestamp = _utc_now_iso()
+
+    matched_candidates: list[dict[str, Any]] = []
+    skipped = 0
+    for job in filtered_jobs:
+        if await was_job_already_shown(
+            job["apply_url"],
+            job["title"],
+            job["company"],
+        ):
+            skipped += 1
+            continue
+
+        description = job["description"] or f"{job['title']} at {job['company']}"
+        analysis = match_resume_to_job(
+            resume.skills,
+            description,
+            job_title=job["title"],
+            job_location=job.get("location", ""),
+            job_remote=bool(
+                job.get("remote_priority") or (job.get("job_type") or "").lower() == "remote"
+            ),
+            resume_keywords=resume.experience_keywords,
+            resume_raw_text=resume.raw_text,
+        )
+        matched_candidates.append(rank_job_candidate(job, analysis))
+
+    ranked_candidates, quality_rejected = filter_jobs_by_quality(matched_candidates)
+
+    stored_jobs: list[JobDocument] = []
+    for candidate in ranked_candidates:
+        job_payload = build_job_create(
+            candidate,
+            {
+                "matched_skills": candidate["matched_skills"],
+                "missing_skills": candidate["missing_skills"],
+                "match_percentage": candidate["match_percentage"],
+                "recommendation": candidate["recommendation"],
+            },
+            scan_id,
+            scan_timestamp,
+        )
+        stored_jobs.append(await save_job(job_payload))
+
+    easy_apply = sum(1 for j in result.jobs if j.easy_apply)
+    status = "ok" if stored_jobs or result.jobs else "empty"
+    message = (
+        f"Stored {len(stored_jobs)} LinkedIn jobs in the latest scan."
+        if stored_jobs
+        else "No new LinkedIn jobs to store."
+        if result.jobs
+        else "No LinkedIn jobs returned."
+    )
+
+    logger.info(
+        "LinkedIn merge scan=%s fetched=%d filtered=%d stored=%d skipped=%d quality_rejected=%d",
+        scan_id,
+        len(result.jobs),
+        filtered_out,
+        len(stored_jobs),
+        skipped,
+        quality_rejected,
+    )
+
+    return LinkedInFetchResponse(
+        status=status,
+        message=message,
+        session_valid=True,
+        jobs_fetched=len(result.jobs),
+        jobs_filtered=filtered_out,
+        jobs_stored=len(stored_jobs),
+        jobs_skipped=skipped,
+        easy_apply_count=easy_apply,
+        search_keywords=search_keywords,
+        scan_id=scan_id,
+        jobs=sort_job_documents(stored_jobs),
     )

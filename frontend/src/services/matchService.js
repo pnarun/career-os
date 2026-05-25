@@ -1,28 +1,4 @@
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8001"
-
-/**
- * @param {Response} response
- * @returns {Promise<string>}
- */
-async function parseErrorMessage(response) {
-  try {
-    const data = await response.json()
-    const detail = data?.detail
-
-    if (typeof detail === "string") {
-      return detail
-    }
-
-    if (detail?.message) {
-      return detail.message
-    }
-
-    return data?.message ?? `Request failed (${response.status})`
-  } catch {
-    return `Request failed (${response.status})`
-  }
-}
+import { apiFetch, parseErrorMessage } from "@/lib/apiClient"
 
 /**
  * Match a resume against a job description.
@@ -35,7 +11,7 @@ export async function matchJob({ resumeId = "", jobDescription }) {
     throw new Error("Job description must be at least 10 characters.")
   }
 
-  const response = await fetch(`${API_BASE_URL}/match-job`, {
+  const response = await apiFetch(`/match-job`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({

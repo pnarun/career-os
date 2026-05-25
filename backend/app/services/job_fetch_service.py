@@ -1,237 +1,252 @@
 import asyncio
 import logging
-import re
-from html import unescape
-from typing import Any, TypedDict
-
-import requests
+from dataclasses import dataclass, field
 
 from app.services.job_filter_service import filter_normalized_jobs
-from app.services.job_quality_service import is_valid_apply_url
+from app.services.job_dedupe_service import dedupe_jobs
+from app.services.job_sources.aggregator.aggregator_service import aggregate_jobs
+from app.services.job_sources.base.provider_diagnostics import (
+    classify_message,
+    diagnostic_failure,
+    diagnostic_from_exception,
+)
+from app.services.job_sources.base.source_result import (
+    AggregatorFetchResult,
+    NormalizedSourceJob,
+    SourceFetchResult,
+)
+from app.services.job_sources.linkedin_playwright_source import (
+    LinkedInPlaywrightJobSource,
+)
 
 logger = logging.getLogger(__name__)
 
-REMOTEOK_API_URL = "https://remoteok.com/api"
-ARBEITNOW_API_URL = "https://arbeitnow.com/api/job-board-api"
-REQUEST_TIMEOUT = 25
-REQUEST_HEADERS = {
-    "User-Agent": "CareerOS/1.0 (job-discovery; +https://github.com/career-os)",
-    "Accept": "application/json",
-}
-
 
 class JobFetchError(Exception):
-    """Raised when fetching jobs from external APIs fails."""
+    """Raised when job aggregation fails catastrophically."""
 
 
-class NormalizedJob(TypedDict):
-    title: str
-    company: str
-    location: str
-    apply_url: str
-    source: str
-    description: str
-    easy_apply: bool
-    job_type: str
-    tags: list[str]
-    remote_priority: bool
-    india_focused: bool
+@dataclass
+class PublicJobsFetchResult:
+    """Jobs ready for match pipeline plus aggregation metadata."""
+
+    jobs: list[dict]
+    filtered_rejected: int
+    aggregation: AggregatorFetchResult
+    pre_filter_jobs: list[dict]
+    linkedin_fetch: dict = field(default_factory=dict)
 
 
-def _strip_html(text: str) -> str:
-    if not text:
-        return ""
-    cleaned = re.sub(r"<[^>]+>", " ", text)
-    return unescape(re.sub(r"\s+", " ", cleaned)).strip()
-
-
-def _normalize_apply_url(url: str, source: str) -> str:
-    url = (url or "").strip()
-    if not url:
-        return ""
-    if url.startswith("//"):
-        return f"https:{url}"
-    if url.startswith("/") and source == "remoteok":
-        return f"https://remoteok.com{url}"
-    return url
-
-
-def _parse_tags(raw_tags: Any) -> list[str]:
-    if isinstance(raw_tags, list):
-        return [str(tag) for tag in raw_tags if tag]
-    if raw_tags:
-        return [str(raw_tags)]
-    return []
-
-
-def _parse_remoteok_jobs(payload: list[dict[str, Any]]) -> list[NormalizedJob]:
-    jobs: list[NormalizedJob] = []
-
-    for item in payload:
-        if not isinstance(item, dict):
-            continue
-        if "position" not in item and "company" not in item:
-            continue
-
-        title = (item.get("position") or item.get("title") or "").strip()
-        company = (item.get("company") or "").strip()
-        if not title or not company:
-            continue
-
-        tags = _parse_tags(item.get("tags"))
-        description = _strip_html(item.get("description") or "")
-        location = (item.get("location") or "Remote").strip()
-        apply_url = _normalize_apply_url(
-            item.get("url") or item.get("apply_url") or "",
-            "remoteok",
-        )
-        if not apply_url:
-            continue
-
-        jobs.append(
-            NormalizedJob(
-                title=title,
-                company=company,
-                location=location,
-                apply_url=apply_url,
-                source="remoteok",
-                description=description,
-                easy_apply=False,
-                job_type="remote",
-                tags=tags,
-                remote_priority=False,
-                india_focused=False,
-            )
-        )
-
-    return jobs
-
-
-def _parse_arbeitnow_jobs(payload: dict[str, Any]) -> list[NormalizedJob]:
-    jobs: list[NormalizedJob] = []
-    items = payload.get("data") or []
-
-    for item in items:
-        if not isinstance(item, dict):
-            continue
-
-        title = (item.get("title") or "").strip()
-        company = (item.get("company_name") or item.get("company") or "").strip()
-        if not title or not company:
-            continue
-
-        tags = _parse_tags(item.get("tags"))
-        description = _strip_html(item.get("description") or "")
-        location = (item.get("location") or "Remote").strip()
-        apply_url = _normalize_apply_url(item.get("url") or "", "arbeitnow")
-        if not apply_url or not is_valid_apply_url(apply_url):
-            continue
-
-        job_types = item.get("job_types") or []
-        job_type = ", ".join(job_types) if isinstance(job_types, list) else str(job_types)
-        if item.get("remote"):
-            job_type = f"remote{', ' + job_type if job_type else ''}".strip(", ")
-
-        jobs.append(
-            NormalizedJob(
-                title=title,
-                company=company,
-                location=location,
-                apply_url=apply_url,
-                source="arbeitnow",
-                description=description,
-                easy_apply=False,
-                job_type=job_type or "unknown",
-                tags=tags,
-                remote_priority=False,
-                india_focused=False,
-            )
-        )
-
-    return jobs
-
-
-def _fetch_remoteok_jobs() -> list[NormalizedJob]:
-    try:
-        response = requests.get(
-            REMOTEOK_API_URL,
-            headers=REQUEST_HEADERS,
-            timeout=REQUEST_TIMEOUT,
-        )
-        response.raise_for_status()
-        payload = response.json()
-        if not isinstance(payload, list):
-            logger.warning("RemoteOK returned unexpected payload type")
-            return []
-        return _parse_remoteok_jobs(payload)
-    except requests.RequestException as exc:
-        logger.exception("RemoteOK fetch failed")
-        raise JobFetchError("Failed to fetch jobs from RemoteOK") from exc
-
-
-def _fetch_arbeitnow_jobs() -> list[NormalizedJob]:
-    try:
-        response = requests.get(
-            ARBEITNOW_API_URL,
-            headers=REQUEST_HEADERS,
-            timeout=REQUEST_TIMEOUT,
-        )
-        response.raise_for_status()
-        payload = response.json()
-        if not isinstance(payload, dict):
-            logger.warning("Arbeitnow returned unexpected payload type")
-            return []
-        return _parse_arbeitnow_jobs(payload)
-    except requests.RequestException as exc:
-        logger.warning("Arbeitnow fetch failed, continuing with other sources: %s", exc)
-        return []
-
-
-def _dedupe_normalized_jobs(jobs: list[dict]) -> list[dict]:
-    """Deduplicate within a single fetch batch by apply_url or title+company."""
-    seen_urls: set[str] = set()
-    seen_pairs: set[tuple[str, str]] = set()
-    unique: list[dict] = []
-
+def _pipeline_dicts_to_normalized(jobs: list[dict]) -> list[NormalizedSourceJob]:
+    normalized: list[NormalizedSourceJob] = []
     for job in jobs:
-        url_key = job["apply_url"].strip().lower()
-        pair_key = (job["title"].strip().lower(), job["company"].strip().lower())
-
-        if url_key and url_key in seen_urls:
+        try:
+            normalized.append(
+                NormalizedSourceJob(
+                    source=str(job.get("source", "unknown")),
+                    source_job_id=str(job.get("source_job_id", "")),
+                    title=str(job.get("title", "")),
+                    company=str(job.get("company", "")),
+                    location=str(job.get("location", "")),
+                    remote=bool(job.get("remote") or job.get("job_type") == "remote"),
+                    apply_url=str(job.get("apply_url", "")),
+                    description=str(job.get("description", "")),
+                    posted_at=str(job.get("posted_at", "")),
+                    fetch_timestamp=str(job.get("fetch_timestamp", "")),
+                    metadata=dict(job.get("metadata") or {}),
+                    easy_apply=bool(job.get("easy_apply")),
+                    job_type=str(job.get("job_type", "")),
+                    tags=list(job.get("tags") or []),
+                )
+            )
+        except Exception:
             continue
-        if pair_key in seen_pairs:
-            continue
-
-        if url_key:
-            seen_urls.add(url_key)
-        seen_pairs.add(pair_key)
-        unique.append(job)
-
-    return unique
+    return normalized
 
 
-def fetch_public_jobs() -> tuple[list[dict], int]:
+def merge_and_dedupe_pipeline_jobs(
+    existing: list[dict],
+    supplemental: list[dict],
+) -> list[dict]:
+    combined = _pipeline_dicts_to_normalized(existing) + _pipeline_dicts_to_normalized(
+        supplemental
+    )
+    dedupe_result = dedupe_jobs(combined)
+    return [job.to_pipeline_dict() for job in dedupe_result.jobs]
+
+
+def _upsert_provider_diagnostic(aggregation: AggregatorFetchResult, diagnostic) -> None:
+    for index, existing in enumerate(aggregation.provider_diagnostics):
+        if existing.source == diagnostic.source:
+            aggregation.provider_diagnostics[index] = diagnostic
+            break
+    else:
+        aggregation.provider_diagnostics.append(diagnostic)
+
+
+def _record_linkedin_failure(aggregation: AggregatorFetchResult, message: str) -> None:
+    aggregation.failed_sources = list(aggregation.failed_sources)
+    if "linkedin" not in aggregation.failed_sources:
+        aggregation.failed_sources.append("linkedin")
+    aggregation.source_errors["linkedin"] = message
+
+
+def _merge_linkedin_result(
+    jobs: list[dict],
+    aggregation: AggregatorFetchResult,
+    linkedin_result: SourceFetchResult | BaseException,
+) -> tuple[list[dict], dict]:
+    """Always merge LinkedIn fetch outcome into aggregation diagnostics."""
+    fetch_meta: dict = {"triggered": True}
+
+    if isinstance(linkedin_result, BaseException):
+        diagnostic = diagnostic_from_exception("linkedin", linkedin_result)
+        _upsert_provider_diagnostic(aggregation, diagnostic)
+        _record_linkedin_failure(aggregation, diagnostic.error_message)
+        fetch_meta.update(
+            {
+                "status": "error",
+                "message": diagnostic.error_message,
+                "diagnostic": diagnostic.model_dump(),
+            }
+        )
+        return jobs, fetch_meta
+
+    if linkedin_result.diagnostic:
+        _upsert_provider_diagnostic(aggregation, linkedin_result.diagnostic)
+
+    if linkedin_result.error or (
+        linkedin_result.diagnostic and linkedin_result.diagnostic.status != "success"
+    ):
+        message = linkedin_result.error or (
+            linkedin_result.diagnostic.error_message if linkedin_result.diagnostic else ""
+        )
+        fetch_meta.update(
+            {
+                "status": (
+                    "session_invalid"
+                    if linkedin_result.diagnostic
+                    and linkedin_result.diagnostic.error_type == "auth_required"
+                    else "error"
+                ),
+                "message": message,
+                "diagnostic": (
+                    linkedin_result.diagnostic.model_dump()
+                    if linkedin_result.diagnostic
+                    else {}
+                ),
+            }
+        )
+        _record_linkedin_failure(aggregation, message)
+        return jobs, fetch_meta
+
+    if not linkedin_result.jobs:
+        message = "LinkedIn returned no jobs"
+        diagnostic = diagnostic_failure(
+            "linkedin",
+            error_type="selector_mismatch",
+            error_message=message,
+        )
+        _upsert_provider_diagnostic(aggregation, diagnostic)
+        _record_linkedin_failure(aggregation, message)
+        fetch_meta.update(
+            {
+                "status": "empty",
+                "message": message,
+                "diagnostic": diagnostic.model_dump(),
+            }
+        )
+        return jobs, fetch_meta
+
+    linkedin_pipeline = [job.to_pipeline_dict() for job in linkedin_result.jobs]
+    merged = merge_and_dedupe_pipeline_jobs(jobs, linkedin_pipeline)
+
+    aggregation.sources["linkedin"] = len(linkedin_result.jobs)
+    aggregation.total_fetched += len(linkedin_result.jobs)
+    aggregation.total_after_dedupe = len(merged)
+
+    easy_apply = sum(1 for j in linkedin_result.jobs if j.easy_apply)
+    fetch_meta.update(
+        {
+            "status": "ok",
+            "jobs_added": len(linkedin_result.jobs),
+            "easy_apply_count": easy_apply,
+            "merged_total": len(merged),
+            "diagnostic": (
+                linkedin_result.diagnostic.model_dump()
+                if linkedin_result.diagnostic
+                else {}
+            ),
+        }
+    )
+    logger.info(
+        "[LINKEDIN] Merged into scan added=%d total=%d",
+        len(linkedin_result.jobs),
+        len(merged),
+    )
+    return merged, fetch_meta
+
+
+async def fetch_public_jobs_async() -> PublicJobsFetchResult:
     """
-    Fetch, normalize, and filter jobs from active public APIs.
-    Quality scoring runs after matching in job_service (post-filter pipeline).
+    Fetch all platforms concurrently:
+    HTTP/RSS sources (aggregator) + LinkedIn (Playwright session).
     """
-    remoteok_jobs = _fetch_remoteok_jobs()
-    arbeitnow_jobs = _fetch_arbeitnow_jobs()
-    combined = remoteok_jobs + arbeitnow_jobs
-    deduped = _dedupe_normalized_jobs(combined)
-    filtered, rejected_count = filter_normalized_jobs(deduped)
+    logger.info("[FETCH] Starting full-platform scan (HTTP sources + LinkedIn)")
+
+    async def _fetch_linkedin() -> SourceFetchResult | BaseException:
+        try:
+            return await asyncio.wait_for(
+                LinkedInPlaywrightJobSource().run_fetch(),
+                timeout=120.0,
+            )
+        except asyncio.TimeoutError:
+            return TimeoutError("LinkedIn discovery timed out after 120 seconds")
+        except Exception as exc:
+            return exc
+
+    aggregation_result, linkedin_result = await asyncio.gather(
+        aggregate_jobs(),
+        _fetch_linkedin(),
+        return_exceptions=True,
+    )
+
+    if isinstance(aggregation_result, BaseException):
+        logger.exception("Job aggregator failed")
+        raise JobFetchError("Failed to aggregate jobs from sources") from aggregation_result
+
+    aggregation: AggregatorFetchResult = aggregation_result
+
+    pre_filter_jobs = list(aggregation.jobs)
+    pre_filter_jobs, linkedin_meta = _merge_linkedin_result(
+        pre_filter_jobs,
+        aggregation,
+        linkedin_result,
+    )
+
+    filtered_jobs, rejected_count = filter_normalized_jobs(pre_filter_jobs)
 
     logger.info(
-        "Fetched jobs: remoteok=%d arbeitnow=%d deduped=%d accepted=%d rejected=%d",
-        len(remoteok_jobs),
-        len(arbeitnow_jobs),
-        len(deduped),
-        len(filtered),
+        "[FETCH] Pipeline complete aggregated=%d deduped=%d filtered_in=%d rejected=%d "
+        "sources=%s failed=%s linkedin=%s",
+        aggregation.total_fetched,
+        aggregation.total_after_dedupe,
+        len(filtered_jobs),
         rejected_count,
+        aggregation.sources,
+        aggregation.failed_sources,
+        linkedin_meta.get("status"),
     )
-    return filtered, rejected_count
+
+    return PublicJobsFetchResult(
+        jobs=filtered_jobs,
+        filtered_rejected=rejected_count,
+        aggregation=aggregation,
+        pre_filter_jobs=pre_filter_jobs,
+        linkedin_fetch=linkedin_meta,
+    )
 
 
-async def fetch_public_jobs_async() -> tuple[list[dict], int]:
-    """Async wrapper for public job fetching."""
-    return await asyncio.to_thread(fetch_public_jobs)
+def fetch_public_jobs() -> PublicJobsFetchResult:
+    """Sync wrapper for scripts and tests."""
+    return asyncio.run(fetch_public_jobs_async())

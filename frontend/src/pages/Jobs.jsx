@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { useRealtimeOptional } from "@/context/RealtimeContext"
 import {
   AlertCircle,
   Briefcase,
@@ -11,8 +12,8 @@ import {
   MapPin,
   RefreshCw,
   ScanLine,
+  Search,
   ShieldAlert,
-  ShieldCheck,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -26,7 +27,19 @@ import {
 } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 import { fetchHistoricalJobs } from "@/services/jobDebugService"
-import { fetchJobs, getJobs, getMatchBadgeVariant } from "@/services/jobService"
+import { DebugSummaryPanel } from "@/components/DebugSummaryPanel"
+import { JobApplicationActions } from "@/components/JobApplicationActions"
+import { JobDetailsModal } from "@/components/JobDetailsModal"
+import { ProviderFeedSummary } from "@/components/ProviderFeedSummary"
+import { ScanAnalyticsPanel } from "@/components/ScanAnalyticsPanel"
+import {
+  FEED_PROVIDER_OPTIONS,
+  FEED_SORT_OPTIONS,
+  getJobsFeed,
+} from "@/services/jobFeedService"
+import { resolveScanSummary } from "@/utils/providerStatusUtils"
+import { fetchJobs, getMatchBadgeVariant } from "@/services/jobService"
+import { getLatestScanAnalytics } from "@/services/scanAnalyticsService"
 import {
   DEFAULT_LOCATION_FILTER,
   buildLocationSummary,
@@ -36,9 +49,13 @@ import {
   getLocationBadgeLabel,
   getLocationBadgeStyle,
   getLocationCategory,
-  getSourceBadgeStyle,
-  getSourceLabel,
 } from "@/utils/jobLocationUtils"
+import {
+  filterJobsByLocationAndProviders,
+} from "@/utils/jobPlatformUtils"
+import { ProviderIconBadge } from "@/components/ProviderIconBadge"
+import { formatPostedTime } from "@/utils/providerIconUtils"
+import { getMatchInsightBadges, getStrengthSummary } from "@/utils/matchInsightUtils"
 import {
   buildQualityDebugSummary,
   canShowApplyButton,
@@ -116,20 +133,23 @@ function SkillTags({ items, variant }) {
   )
 }
 
-function JobCard({ job, showScanMeta, showQualityDebug }) {
+function JobCard({ job, showScanMeta, showQualityDebug, onViewDetails }) {
   const variant = getMatchBadgeVariant(job.recommendation)
   const locationCategory = getLocationCategory(job)
-  const sourceLabel = getSourceLabel(job)
   const qualityScore = getJobQualityScore(job)
   const qualityBadges = getQualityBadges(job)
+  const insightBadges = getMatchInsightBadges(job)
+  const strengthSummary = getStrengthSummary(job)
   const showApply = canShowApplyButton(job)
   const rejectionInsight = showQualityDebug ? getQualityRejectionInsight(job) : null
+  const postedLabel = formatPostedTime(job.posted_at || job.scan_timestamp)
 
   return (
     <Card className="flex flex-col">
       <CardHeader>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 space-y-1">
+            <ProviderIconBadge source={job.source} className="mb-2" />
             <CardTitle className="text-base leading-snug">{job.title}</CardTitle>
             <CardDescription className="font-medium text-foreground/80">
               {job.company}
@@ -164,10 +184,21 @@ function JobCard({ job, showScanMeta, showQualityDebug }) {
             label={getLocationBadgeLabel(job)}
             className={getLocationBadgeStyle(locationCategory)}
           />
-          <TagBadge
-            label={sourceLabel}
-            className={getSourceBadgeStyle(String(job.source || ""))}
-          />
+          {(job.remote_priority || job.job_type === "remote") && (
+            <TagBadge
+              label="Remote"
+              className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+            />
+          )}
+          {job.easy_apply && (
+            <TagBadge
+              label="Easy Apply"
+              className="bg-sky-500/10 text-sky-400 border-sky-500/30"
+            />
+          )}
+          {insightBadges.slice(0, 3).map(({ key, label, className }) => (
+            <TagBadge key={key} label={label} className={className} />
+          ))}
           {qualityBadges.map(({ key, label, className }) => (
             <TagBadge key={key} label={label} className={className} />
           ))}
@@ -184,6 +215,19 @@ function JobCard({ job, showScanMeta, showQualityDebug }) {
           {job.location || "Remote"}
           {job.job_type ? ` · ${job.job_type}` : ""}
         </p>
+        {postedLabel && (
+          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Clock className="size-3.5 shrink-0" />
+            Posted {postedLabel}
+          </p>
+        )}
+
+        {job.career_fit && (
+          <p className="text-xs font-medium text-foreground/90">{job.career_fit}</p>
+        )}
+        {strengthSummary && (
+          <p className="text-xs text-muted-foreground">{strengthSummary}</p>
+        )}
 
         {showQualityDebug && (
           <div className="rounded-md border border-dashed border-amber-500/30 bg-amber-500/5 px-2.5 py-2 text-xs">
@@ -220,8 +264,12 @@ function JobCard({ job, showScanMeta, showQualityDebug }) {
           </div>
         )}
       </CardContent>
-      {showApply ? (
-        <CardFooter>
+      <CardFooter className="flex flex-col gap-2">
+        <JobApplicationActions job={job} compact />
+        <Button type="button" variant="secondary" className="w-full" onClick={() => onViewDetails?.(job)}>
+          View match analysis
+        </Button>
+        {showApply ? (
           <Button
             className="w-full"
             variant="outline"
@@ -230,31 +278,102 @@ function JobCard({ job, showScanMeta, showQualityDebug }) {
             <ExternalLink className="size-4" />
             {getApplyButtonLabel(job)}
           </Button>
-        </CardFooter>
-      ) : isJobSuspicious(job) ? (
-        <CardFooter>
+        ) : isJobSuspicious(job) ? (
           <p className="flex w-full items-center justify-center gap-1.5 text-xs text-muted-foreground">
             <ShieldAlert className="size-3.5" />
             Apply unavailable — job flagged suspicious
           </p>
-        </CardFooter>
-      ) : null}
+        ) : null}
+      </CardFooter>
     </Card>
   )
 }
 
 export function Jobs() {
   const [displayJobs, setDisplayJobs] = useState([])
+  const [allFeedJobs, setAllFeedJobs] = useState([])
   const [historicalMode, setHistoricalMode] = useState(false)
   const [locationFilter, setLocationFilter] = useState(DEFAULT_LOCATION_FILTER)
+  const [selectedProviders, setSelectedProviders] = useState([])
+  const [remoteOnly, setRemoteOnly] = useState(false)
+  const [easyApplyOnly, setEasyApplyOnly] = useState(false)
+  const [minMatch, setMinMatch] = useState(0)
+  const [keyword, setKeyword] = useState("")
+  const [sortBy, setSortBy] = useState("default")
+  const [feedMeta, setFeedMeta] = useState({
+    providers: {},
+    duplicates_removed: 0,
+    total_jobs: 0,
+  })
   const [status, setStatus] = useState("idle")
   const [scanSummary, setScanSummary] = useState(null)
+  const [scanAnalytics, setScanAnalytics] = useState(null)
   const [error, setError] = useState(null)
   const [hasFetched, setHasFetched] = useState(false)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [selectedJob, setSelectedJob] = useState(null)
+  const [strongMatchesOnly, setStrongMatchesOnly] = useState(false)
+  const [remoteHighMatch, setRemoteHighMatch] = useState(false)
+  const [easyApplyHighMatch, setEasyApplyHighMatch] = useState(false)
+  const realtime = useRealtimeOptional()
+
+  const buildFeedFilters = useCallback(
+    () => ({
+      providers: selectedProviders,
+      remoteOnly,
+      easyApplyOnly,
+      minMatch: minMatch > 0 ? minMatch : undefined,
+      keyword,
+      sort: sortBy,
+      strongMatchesOnly,
+      remoteHighMatch,
+      easyApplyHighMatch,
+    }),
+    [
+      selectedProviders,
+      remoteOnly,
+      easyApplyOnly,
+      minMatch,
+      keyword,
+      sortBy,
+      strongMatchesOnly,
+      remoteHighMatch,
+      easyApplyHighMatch,
+    ]
+  )
+
+  const applyHistoricalFilters = useCallback(
+    (jobs) => {
+      let result = filterJobsByLocationAndProviders(jobs, locationFilter, selectedProviders)
+      if (remoteOnly) {
+        result = result.filter(
+          (job) => job.remote_priority || job.job_type === "remote"
+        )
+      }
+      if (easyApplyOnly) {
+        result = result.filter((job) => job.easy_apply)
+      }
+      if (minMatch > 0) {
+        result = result.filter((job) => (job.match_percentage ?? 0) >= minMatch)
+      }
+      if (keyword.trim()) {
+        const needle = keyword.trim().toLowerCase()
+        result = result.filter(
+          (job) =>
+            job.title?.toLowerCase().includes(needle) ||
+            job.company?.toLowerCase().includes(needle) ||
+            job.location?.toLowerCase().includes(needle) ||
+            job.description?.toLowerCase().includes(needle)
+        )
+      }
+      return result
+    },
+    [locationFilter, selectedProviders, remoteOnly, easyApplyOnly, minMatch, keyword]
+  )
 
   const locationOptions = useMemo(
-    () => extractLocationFilterOptions(displayJobs),
-    [displayJobs]
+    () => extractLocationFilterOptions(historicalMode ? displayJobs : allFeedJobs),
+    [displayJobs, allFeedJobs, historicalMode]
   )
 
   const locationSummary = useMemo(
@@ -272,19 +391,31 @@ export function Jobs() {
     [displayJobs]
   )
 
-  const filteredJobs = useMemo(
-    () => filterJobsByLocation(displayJobs, locationFilter),
-    [displayJobs, locationFilter]
-  )
-
-  const loadLatestScan = useCallback(async () => {
-    const data = await getJobs()
-    setDisplayJobs(data)
-    if (data.length > 0) {
+  const filteredJobs = useMemo(() => {
+    if (historicalMode) {
+      return applyHistoricalFilters(displayJobs)
+    }
+    return filterJobsByLocation(displayJobs, locationFilter)
+  }, [displayJobs, locationFilter, historicalMode, applyHistoricalFilters])
+  const loadUnifiedFeed = useCallback(async () => {
+    const filters = buildFeedFilters()
+    const [feed, analytics] = await Promise.all([
+      getJobsFeed(filters),
+      getLatestScanAnalytics().catch(() => null),
+    ])
+    setDisplayJobs(feed.jobs)
+    setAllFeedJobs(feed.jobs)
+    setFeedMeta({
+      providers: feed.providers ?? {},
+      duplicates_removed: feed.duplicates_removed ?? 0,
+      total_jobs: feed.total_jobs ?? feed.jobs.length,
+    })
+    setScanAnalytics(analytics)
+    if (feed.jobs.length > 0) {
       setHasFetched(true)
     }
-    return data
-  }, [])
+    return feed
+  }, [buildFeedFilters])
 
   const loadHistoricalJobs = useCallback(async () => {
     const data = await fetchHistoricalJobs()
@@ -297,57 +428,106 @@ export function Jobs() {
     if (historicalMode) {
       return loadHistoricalJobs()
     }
-    return loadLatestScan()
-  }, [historicalMode, loadHistoricalJobs, loadLatestScan])
+    return loadUnifiedFeed()
+  }, [historicalMode, loadHistoricalJobs, loadUnifiedFeed])
 
   useEffect(() => {
+    if (historicalMode) return
     setStatus("loading")
-    loadDisplayJobs()
+    loadUnifiedFeed()
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : "Failed to load jobs feed")
+      })
+      .finally(() => setStatus("idle"))
+  }, [
+    historicalMode,
+    selectedProviders,
+    remoteOnly,
+    easyApplyOnly,
+    minMatch,
+    keyword,
+    sortBy,
+    strongMatchesOnly,
+    remoteHighMatch,
+    easyApplyHighMatch,
+    loadUnifiedFeed,
+  ])
+
+  useEffect(() => {
+    if (historicalMode || !realtime?.feedVersion) return
+    loadUnifiedFeed().catch(() => {})
+  }, [realtime?.feedVersion, historicalMode, loadUnifiedFeed])
+
+  useEffect(() => {
+    if (!historicalMode) return
+    setStatus("loading")
+    loadHistoricalJobs()
       .catch((err) => {
         setError(err instanceof Error ? err.message : "Failed to load jobs")
       })
       .finally(() => setStatus("idle"))
-  }, [loadDisplayJobs])
+  }, [historicalMode, loadHistoricalJobs])
 
   const onHistoricalToggle = (enabled) => {
     setHistoricalMode(enabled)
     setLocationFilter(DEFAULT_LOCATION_FILTER)
+    setSelectedProviders([])
+    setRemoteOnly(false)
+    setEasyApplyOnly(false)
+    setMinMatch(0)
+    setKeyword("")
+    setSortBy("default")
     setError(null)
     setStatus("loading")
     setDisplayJobs([])
+  }
 
-    const loader = enabled ? loadHistoricalJobs : loadLatestScan
-    loader()
-      .catch((err) => {
-        setError(err instanceof Error ? err.message : "Failed to load jobs")
-      })
-      .finally(() => setStatus("idle"))
+  const toggleProvider = (provider) => {
+    setSelectedProviders((current) =>
+      current.includes(provider)
+        ? current.filter((item) => item !== provider)
+        : [...current, provider]
+    )
   }
 
   const onFetchJobs = async () => {
     if (historicalMode) return
 
     setError(null)
-    setStatus("loading")
+    setIsRefreshing(true)
     setScanSummary(null)
-    setDisplayJobs([])
     setHasFetched(true)
 
     try {
       const result = await fetchJobs()
       setScanSummary(result)
-      const latest = await getJobs()
-      setDisplayJobs(latest)
+      setScanAnalytics(
+        resolveScanSummary(result, result.scan_summary) ?? result.scan_summary ?? null
+      )
+      await loadUnifiedFeed()
       setLocationFilter(DEFAULT_LOCATION_FILTER)
+      setSelectedProviders([])
+      setRemoteOnly(false)
+      setEasyApplyOnly(false)
+      setMinMatch(0)
+      setKeyword("")
+      setSortBy("default")
       setStatus("success")
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch jobs")
       setStatus("error")
+    } finally {
+      setIsRefreshing(false)
     }
   }
 
-  const isFetching = status === "loading"
-  const isLoadingJobs = status === "loading" && displayJobs.length === 0
+  const isFetching = isRefreshing
+  const isLoadingJobs = status === "loading" && !isRefreshing && displayJobs.length === 0
+  const resolvedScanSummary = useMemo(
+    () => resolveScanSummary(scanSummary, scanAnalytics),
+    [scanSummary, scanAnalytics]
+  )
+
   const activeScanId = scanSummary?.scan_id ?? displayJobs[0]?.scan_id
   const activeScanTime =
     scanSummary?.scan_timestamp ?? displayJobs[0]?.scan_timestamp
@@ -364,10 +544,10 @@ export function Jobs() {
           <p className="mt-1 text-sm text-muted-foreground">
             {historicalMode
               ? "Historical debug — all stored jobs (up to 500)"
-              : "Latest scan batch — quality-ranked, apply-validated jobs"}
+              : "Unified multi-provider feed — deduplicated, scored, and ranked"}
           </p>
         </div>
-        <div className="flex flex-wrap items-end gap-3">
+        <div className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center xl:w-auto xl:justify-end">
           <label className="flex h-9 cursor-pointer items-center gap-2 rounded-lg border border-input bg-background px-3 text-sm">
             <input
               type="checkbox"
@@ -376,37 +556,33 @@ export function Jobs() {
               className="size-4 rounded border-border"
             />
             <History className="size-4 text-muted-foreground" />
-            <span>Historical Debug Mode</span>
+            <span className="whitespace-nowrap">Historical Debug Mode</span>
           </label>
 
-          <div className="flex flex-col gap-1.5">
-            <label
-              htmlFor="location-filter"
-              className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"
-            >
-              <Filter className="size-3.5" />
-              Location Filter
-            </label>
-            <select
-              id="location-filter"
-              value={locationFilter}
-              onChange={(e) => setLocationFilter(e.target.value)}
-              disabled={displayJobs.length === 0 || isLoadingJobs}
-              className="h-9 min-w-[140px] rounded-lg border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              {locationOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          </div>
+          <select
+            id="location-filter"
+            value={locationFilter}
+            onChange={(e) => setLocationFilter(e.target.value)}
+            disabled={displayJobs.length === 0 || isLoadingJobs}
+            aria-label="Location filter"
+            className="h-9 w-full min-w-0 shrink-0 rounded-lg border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:w-40"
+          >
+            {locationOptions.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
 
-          <Button onClick={onFetchJobs} disabled={isFetching || historicalMode}>
+          <Button
+            onClick={onFetchJobs}
+            disabled={isFetching || historicalMode}
+            className="h-9 w-full shrink-0 sm:w-auto sm:min-w-[132px]"
+          >
             {isFetching ? (
               <>
                 <Loader2 className="size-4 animate-spin" />
-                Running scan…
+                Fetching…
               </>
             ) : (
               <>
@@ -418,90 +594,162 @@ export function Jobs() {
         </div>
       </div>
 
-      <Card className="border-dashed border-amber-500/30 bg-amber-500/5">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium">Debug summary</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
-          <div>
-            <p className="text-xs text-muted-foreground">Historical Debug Mode</p>
-            <p className="font-semibold">{historicalMode ? "ON" : "OFF"}</p>
+      {!historicalMode && (
+        <ProviderFeedSummary
+          providers={feedMeta.providers}
+          duplicatesRemoved={feedMeta.duplicates_removed}
+          totalJobs={filteredJobs.length}
+          rawTotal={displayJobs.length}
+        />
+      )}
+
+      <Card>
+        <CardContent className="flex flex-col gap-4 py-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-end">
+            <div className="flex min-w-[200px] flex-1 flex-col gap-1.5">
+              <label htmlFor="keyword-search" className="text-xs font-medium text-muted-foreground">
+                Search
+              </label>
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  id="keyword-search"
+                  type="search"
+                  value={keyword}
+                  onChange={(e) => setKeyword(e.target.value)}
+                  placeholder="Title, company, skills…"
+                  className="h-9 w-full rounded-lg border border-input bg-background pl-9 pr-3 text-sm"
+                />
+              </div>
+            </div>
+
+            <div className="flex min-w-[140px] flex-col gap-1.5">
+              <label htmlFor="sort-filter" className="text-xs font-medium text-muted-foreground">
+                Sort
+              </label>
+              <select
+                id="sort-filter"
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className="h-9 rounded-lg border border-input bg-background px-3 text-sm"
+              >
+                {FEED_SORT_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex min-w-[120px] flex-col gap-1.5">
+              <label htmlFor="min-match" className="text-xs font-medium text-muted-foreground">
+                Min match %
+              </label>
+              <input
+                id="min-match"
+                type="number"
+                min={0}
+                max={100}
+                value={minMatch}
+                onChange={(e) => setMinMatch(Number(e.target.value) || 0)}
+                className="h-9 rounded-lg border border-input bg-background px-3 text-sm"
+              />
+            </div>
+
+            <label className="flex h-9 cursor-pointer items-center gap-2 rounded-lg border border-input bg-background px-3 text-sm">
+              <input
+                type="checkbox"
+                checked={remoteOnly}
+                onChange={(e) => setRemoteOnly(e.target.checked)}
+                className="size-4 rounded border-border"
+              />
+              Remote only
+            </label>
+
+            <label className="flex h-9 cursor-pointer items-center gap-2 rounded-lg border border-input bg-background px-3 text-sm">
+              <input
+                type="checkbox"
+                checked={easyApplyOnly}
+                onChange={(e) => setEasyApplyOnly(e.target.checked)}
+                className="size-4 rounded border-border"
+              />
+              Easy apply only
+            </label>
+
+            <label className="flex h-9 cursor-pointer items-center gap-2 rounded-lg border border-input bg-background px-3 text-sm">
+              <input
+                type="checkbox"
+                checked={strongMatchesOnly}
+                onChange={(e) => setStrongMatchesOnly(e.target.checked)}
+                className="size-4 rounded border-border"
+              />
+              Strong matches only
+            </label>
+
+            <label className="flex h-9 cursor-pointer items-center gap-2 rounded-lg border border-input bg-background px-3 text-sm">
+              <input
+                type="checkbox"
+                checked={remoteHighMatch}
+                onChange={(e) => setRemoteHighMatch(e.target.checked)}
+                className="size-4 rounded border-border"
+              />
+              Remote + high match
+            </label>
+
+            <label className="flex h-9 cursor-pointer items-center gap-2 rounded-lg border border-input bg-background px-3 text-sm">
+              <input
+                type="checkbox"
+                checked={easyApplyHighMatch}
+                onChange={(e) => setEasyApplyHighMatch(e.target.checked)}
+                className="size-4 rounded border-border"
+              />
+              Easy apply + high match
+            </label>
           </div>
+
           <div>
-            <p className="text-xs text-muted-foreground">Jobs loaded</p>
-            <p className="font-semibold tabular-nums">{displayJobs.length}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Shown (filtered)</p>
-            <p className="font-semibold tabular-nums">{filteredJobs.length}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Location filter</p>
-            <p className="font-semibold">{locationFilter}</p>
+            <p className="mb-2 text-xs font-medium text-muted-foreground">Providers</p>
+            <div className="flex flex-wrap gap-2">
+              {FEED_PROVIDER_OPTIONS.map((option) => {
+                const active = selectedProviders.includes(option.value)
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => toggleProvider(option.value)}
+                    className={cn(
+                      "rounded-md border px-2.5 py-1 text-xs font-medium transition-colors",
+                      active
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-input bg-background text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                )
+              })}
+              {selectedProviders.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedProviders([])}
+                  className="rounded-md border border-dashed border-input px-2.5 py-1 text-xs text-muted-foreground"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
           </div>
         </CardContent>
-        {(historicalMode || displayJobs.length > 0) && (
-          <CardContent className="grid gap-4 border-t border-border pt-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
-            <div>
-              <p className="text-xs text-muted-foreground">Avg quality score</p>
-              <p className="font-semibold tabular-nums">{qualitySummary.avgQualityScore}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Suspicious in set</p>
-              <p className="font-semibold tabular-nums text-red-400">
-                {qualitySummary.suspiciousCount}
-              </p>
-            </div>
-            <div className="flex items-start gap-1.5">
-              <ShieldCheck className="mt-0.5 size-4 text-emerald-400" />
-              <div>
-                <p className="text-xs text-muted-foreground">Verified / apply-ready</p>
-                <p className="font-semibold tabular-nums">
-                  {qualitySummary.verifiedCount} / {qualitySummary.withApplyUrlCount}
-                </p>
-              </div>
-            </div>
-            {scanSummary?.quality_rejected != null && !historicalMode && (
-              <div>
-                <p className="text-xs text-muted-foreground">Last scan quality rejected</p>
-                <p className="font-semibold tabular-nums">{scanSummary.quality_rejected}</p>
-              </div>
-            )}
-          </CardContent>
-        )}
-        {(locationSummary.length > 0 || sourceSummary.length > 0) && (
-          <CardContent className="space-y-3 border-t border-border pt-4 text-sm">
-            {locationSummary.length > 0 && (
-              <div>
-                <p className="mb-1 text-xs font-medium text-muted-foreground">
-                  Locations found
-                </p>
-                <ul className="flex flex-wrap gap-x-3 gap-y-1">
-                  {locationSummary.slice(0, 12).map(({ label, count }) => (
-                    <li key={label}>
-                      <span className="font-medium">{label}</span>
-                      <span className="text-muted-foreground"> ({count})</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {sourceSummary.length > 0 && (
-              <div>
-                <p className="mb-1 text-xs font-medium text-muted-foreground">Sources</p>
-                <ul className="flex flex-wrap gap-x-3 gap-y-1">
-                  {sourceSummary.map(({ label, count }) => (
-                    <li key={label}>
-                      <span className="font-medium">{label}</span>
-                      <span className="text-muted-foreground"> ({count})</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </CardContent>
-        )}
       </Card>
+
+      {!historicalMode && (scanAnalytics || scanSummary?.scan_summary) && (
+        <ScanAnalyticsPanel
+          summary={scanSummary?.scan_summary ?? scanAnalytics}
+          scanId={activeScanId}
+          scanTimestamp={activeScanTime ? formatScanTime(activeScanTime) : undefined}
+          displayedCount={filteredJobs.length}
+        />
+      )}
 
       {!historicalMode && (
         <Card>
@@ -536,6 +784,14 @@ export function Jobs() {
                 Stored {scanSummary.stored} new · {scanSummary.skipped_already_shown ?? 0}{" "}
                 already shown · {scanSummary.filtered ?? 0} location/engineering filtered ·{" "}
                 {scanSummary.quality_rejected ?? 0} quality rejected
+                {scanSummary.sources && (
+                  <>
+                    {" "}
+                    · fetched{" "}
+                    {Object.values(scanSummary.sources).reduce((a, b) => a + Number(b), 0)}{" "}
+                    raw across sources
+                  </>
+                )}
               </p>
             )}
 
@@ -598,10 +854,28 @@ export function Jobs() {
               job={job}
               showScanMeta={historicalMode}
               showQualityDebug={historicalMode}
+              onViewDetails={setSelectedJob}
             />
           ))}
         </div>
       )}
+      <DebugSummaryPanel
+        historicalMode={historicalMode}
+        displayJobsCount={displayJobs.length}
+        filteredJobsCount={filteredJobs.length}
+        locationFilter={locationFilter}
+        qualitySummary={qualitySummary}
+        locationSummary={locationSummary}
+        sourceSummary={sourceSummary}
+        scanSummary={scanSummary}
+        resolvedScanSummary={resolvedScanSummary}
+        feedMeta={feedMeta}
+      />
+      <JobDetailsModal
+        job={selectedJob}
+        open={Boolean(selectedJob)}
+        onClose={() => setSelectedJob(null)}
+      />
     </div>
   )
 }
