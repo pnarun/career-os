@@ -1,10 +1,10 @@
 import { Bell, X } from "lucide-react"
 
-import { useRealtime } from "@/context/RealtimeContext"
+import { useRealtimeToasts } from "@/context/RealtimeContext"
 import { cn } from "@/lib/utils"
 
 export function RealtimeToastHost() {
-  const { toasts, dismissToast } = useRealtime()
+  const { toasts, dismissToast } = useRealtimeToasts()
 
   if (!toasts.length) return null
 

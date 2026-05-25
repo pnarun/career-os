@@ -22,7 +22,16 @@ class Settings(BaseSettings):
     ENVIRONMENT: EnvironmentName = "development"
     LOG_LEVEL: str = "INFO"
 
-    CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
+    CORS_ORIGINS: list[str] = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:4173",
+        "http://127.0.0.1:4173",
+    ]
+    """Production: set FRONTEND_URL to your Vercel URL (e.g. https://career-os.vercel.app)."""
+    FRONTEND_URL: str = ""
+    """Optional regex for Vercel preview deploys, e.g. https://.*\\.vercel\\.app"""
+    CORS_ORIGIN_REGEX: str = ""
     CORS_ALLOW_CREDENTIALS: bool = True
 
     MONGO_URI: str = ""
@@ -82,6 +91,26 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.ENVIRONMENT == "production"
+
+    @property
+    def effective_cors_origins(self) -> list[str]:
+        """Merge configured origins with FRONTEND_URL and local dev hosts."""
+        origins = list(self.CORS_ORIGINS)
+        frontend = (self.FRONTEND_URL or "").strip().rstrip("/")
+        if frontend and frontend not in origins:
+            origins.append(frontend)
+        if self.ENVIRONMENT != "production":
+            for host in ("localhost", "127.0.0.1"):
+                for port in (5173, 4173, 3000):
+                    origin = f"http://{host}:{port}"
+                    if origin not in origins:
+                        origins.append(origin)
+        return origins
+
+    @property
+    def effective_cors_origin_regex(self) -> str | None:
+        regex = (self.CORS_ORIGIN_REGEX or "").strip()
+        return regex or None
 
 
 @lru_cache

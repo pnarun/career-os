@@ -146,6 +146,24 @@ docker compose --profile full up --build
 
 See `infra/README.md` for staging/production compose and deployment notes.
 
+## Deploy (Vercel + Render)
+
+| Layer | Host | Config |
+|-------|------|--------|
+| Frontend | **Vercel** (`frontend/` root) | `frontend/.env.example`, `frontend/vercel.json` |
+| API | **Render** (Docker) | `render.yaml`, `backend/Dockerfile` |
+
+1. Deploy API on Render (Blueprint or Docker web service) — see **[docs/DEPLOY.md](docs/DEPLOY.md)**.
+2. Set `MONGO_URI`, `JWT_SECRET_KEY`, `FRONTEND_URL`, and other secrets on Render.
+3. Deploy frontend on Vercel with **Root Directory** = `frontend`.
+4. Set `VITE_API_BASE_URL` and `VITE_WS_BASE_URL` to your Render URL (`https://` / `wss://`).
+
+```bash
+# Local frontend → production API
+cd frontend && cp .env.example .env
+# VITE_API_BASE_URL=https://your-api.onrender.com
+```
+
 ## Browser automation profiles
 
 Playwright stores per-user session cookies under `backend/app/automation/profiles/`. This directory is **gitignored** (sessions, apply flags, `session_metadata.json`). Only `.gitkeep` placeholders and `session_metadata.example.json` are tracked. Copy the example to `session_metadata.json` locally if your setup expects it.

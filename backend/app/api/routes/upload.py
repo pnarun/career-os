@@ -126,6 +126,12 @@ async def upload_resume_endpoint(
     try:
         resume_payload = build_resume_create(upload_result, parsed_profile)
         saved_resume = await save_resume(resume_payload)
+        try:
+            from app.services.user_preferences_service import apply_scan_profile_from_resume
+
+            await apply_scan_profile_from_resume(saved_resume)
+        except Exception as sync_exc:
+            logger.warning("Could not sync scan profile from resume: %s", sync_exc)
     except ResumeServiceError as exc:
         logger.error("Resume persistence failed: %s", exc)
         raise HTTPException(

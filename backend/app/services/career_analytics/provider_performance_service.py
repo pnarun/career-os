@@ -12,7 +12,9 @@ from app.services.job_service import get_latest_scan_jobs
 async def build_provider_performance() -> dict[str, Any]:
     jobs = await get_latest_scan_jobs()
     collection = get_database()["applications"]
-    applications = await collection.find({}).to_list(length=1000)
+    from app.services.application_service import _scoped_query
+
+    applications = await collection.find(_scoped_query()).to_list(length=1000)
 
     provider_jobs: dict[str, list] = {}
     for job in jobs:

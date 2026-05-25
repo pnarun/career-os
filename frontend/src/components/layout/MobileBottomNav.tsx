@@ -1,14 +1,14 @@
-import { Briefcase, Home, Radar, Send, Settings } from "lucide-react"
+import { BarChart3, Briefcase, Home, Radar, FileText } from "lucide-react"
 
 import type { AppPage } from "@/components/layout/Sidebar"
 import { cn } from "@/lib/utils"
 
 const items: { id: AppPage; label: string; icon: typeof Home }[] = [
   { id: "dashboard", label: "Home", icon: Home },
-  { id: "jobs", label: "Jobs", icon: Briefcase },
-  { id: "scans", label: "Scans", icon: Radar },
-  { id: "applications", label: "Apps", icon: Send },
-  { id: "settings", label: "Settings", icon: Settings },
+  { id: "resume-hub", label: "Resume", icon: FileText },
+  { id: "jobs-hub", label: "Jobs", icon: Briefcase },
+  { id: "operations-hub", label: "Scans", icon: Radar },
+  { id: "insights-hub", label: "Intel", icon: BarChart3 },
 ]
 
 type MobileBottomNavProps = {
@@ -30,7 +30,7 @@ export function MobileBottomNav({
       <div className="mx-auto flex max-w-lg items-stretch justify-around px-1 pb-[env(safe-area-inset-bottom)]">
         {items.map((item) => {
           const active = activePage === item.id
-          const enabled = !navLocked
+          const enabled = !navLocked || item.id === "resume-hub"
           return (
             <button
               key={item.id}

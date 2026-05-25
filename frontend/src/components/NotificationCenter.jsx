@@ -10,7 +10,8 @@ import {
   X,
 } from "lucide-react"
 
-import { useRealtimeOptional } from "@/context/RealtimeContext"
+import { useNotificationVersion } from "@/context/RealtimeContext"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import {
@@ -50,40 +51,38 @@ function formatRelativeTime(iso) {
   return `${days}d ago`
 }
 
+async function fetchNotificationPanel() {
+  const [data, countData] = await Promise.all([
+    getNotifications({ limit: 20 }),
+    getUnreadCount(),
+  ])
+  return {
+    notifications: data.notifications ?? [],
+    unreadCount: countData.unread_count ?? 0,
+  }
+}
+
 export function NotificationCenter({ onNavigate }) {
-  const realtime = useRealtimeOptional()
+  const notificationVersion = useNotificationVersion()
+  const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [notifications, setNotifications] = useState([])
-  const [unreadCount, setUnreadCount] = useState(0)
   const panelRef = useRef(null)
 
-  const loadNotifications = useCallback(async () => {
-    setLoading(true)
-    try {
-      const [data, countData] = await Promise.all([
-        getNotifications({ limit: 20 }),
-        getUnreadCount(),
-      ])
-      setNotifications(data.notifications ?? [])
-      setUnreadCount(countData.unread_count ?? 0)
-    } catch {
-      setNotifications([])
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  const { data, isLoading, isFetching } = useQuery({
+    queryKey: ["notifications", "panel"],
+    queryFn: fetchNotificationPanel,
+    staleTime: 45_000,
+    refetchInterval: 120_000,
+  })
+
+  const notifications = data?.notifications ?? []
+  const unreadCount = data?.unreadCount ?? 0
+  const loading = isLoading || isFetching
 
   useEffect(() => {
-    loadNotifications()
-    const interval = setInterval(loadNotifications, 60000)
-    return () => clearInterval(interval)
-  }, [loadNotifications])
-
-  useEffect(() => {
-    if (!realtime?.notificationVersion) return
-    loadNotifications()
-  }, [realtime?.notificationVersion, loadNotifications])
+    if (!notificationVersion) return
+    queryClient.invalidateQueries({ queryKey: ["notifications", "panel"] })
+  }, [notificationVersion, queryClient])
 
   useEffect(() => {
     if (!open) return
@@ -127,7 +126,9 @@ export function NotificationCenter({ onNavigate }) {
         className="relative"
         onClick={() => {
           setOpen((v) => !v)
-          if (!open) loadNotifications()
+          if (!open) {
+            queryClient.invalidateQueries({ queryKey: ["notifications", "panel"] })
+          }
         }}
       >
         <Bell className="size-4" />

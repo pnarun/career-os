@@ -52,6 +52,7 @@ export function UserMenu({ onNavigate }) {
         variant="outline"
         size="sm"
         className="gap-2 pl-2 pr-2"
+        data-tour-id="profile-menu"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-haspopup="menu"

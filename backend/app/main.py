@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.gzip import GZipMiddleware
 
 from app.auth.dependencies import get_current_user
 from app.auth.routes import router as auth_router
@@ -24,6 +25,7 @@ from app.api.routes import resume_ai as resume_ai_routes
 from app.api.routes import career_analytics as career_analytics_routes
 from app.api.routes import copilot as copilot_routes
 from app.api.routes import interview_ai as interview_ai_routes
+from app.api.routes import dashboard as dashboard_routes
 from app.api.routes import system as system_routes
 from app.services.application_service import ensure_application_indexes
 from app.services.auto_apply.apply_history_service import ensure_apply_indexes
@@ -39,6 +41,7 @@ from app.services.workspace_service import ensure_workspace_indexes
 from app.services.user_preferences_service import ensure_preferences_indexes
 from app.services.scan_session_service import ensure_scan_session_indexes
 from app.services.job_service import ensure_job_indexes
+from app.services.resume_service import ensure_resume_indexes
 from app.auth.service import ensure_auth_indexes
 from app.auth.password_reset_service import ensure_password_reset_indexes
 from app.core.config import settings
@@ -69,6 +72,7 @@ async def lifespan(app: FastAPI):
         await ensure_preferences_indexes()
         await ensure_scan_session_indexes()
         await ensure_job_indexes()
+        await ensure_resume_indexes()
         await ensure_application_indexes()
         await ensure_notification_indexes()
         await ensure_career_insight_indexes()
@@ -102,14 +106,17 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.add_middleware(GZipMiddleware, minimum_size=500)
 app.add_middleware(RateLimitMiddleware)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
-    allow_credentials=settings.CORS_ALLOW_CREDENTIALS,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
-)
+_cors_kwargs: dict = {
+    "allow_origins": settings.effective_cors_origins,
+    "allow_credentials": settings.CORS_ALLOW_CREDENTIALS,
+    "allow_methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    "allow_headers": ["Authorization", "Content-Type", "X-Requested-With"],
+}
+if settings.effective_cors_origin_regex:
+    _cors_kwargs["allow_origin_regex"] = settings.effective_cors_origin_regex
+app.add_middleware(CORSMiddleware, **_cors_kwargs)
 
 _auth = [Depends(get_current_user)]
 
@@ -119,6 +126,7 @@ app.include_router(realtime_router)
 app.include_router(db_routes.router)
 app.include_router(upload_routes.router, dependencies=_auth)
 app.include_router(match_routes.router, dependencies=_auth)
+app.include_router(dashboard_routes.router, dependencies=_auth)
 app.include_router(jobs_routes.router, dependencies=_auth)
 app.include_router(applications_routes.router, dependencies=_auth)
 app.include_router(preferences_routes.router, dependencies=_auth)

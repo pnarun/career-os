@@ -15,6 +15,7 @@ from app.services.application_service import (
     ApplicationNotFoundError,
     ApplicationServiceError,
     build_application_analytics,
+    build_job_application_map,
     delete_application,
     get_application_by_job_id,
     get_application_timeline,
@@ -83,6 +84,19 @@ async def patch_application_notes(
         raise HTTPException(status_code=500, detail={"message": "Notes update failed"}) from exc
 
 
+@router.get("/applications/job-map")
+async def get_applications_job_map() -> dict[str, ApplicationDocument]:
+    """Bulk lookup map keyed by job_id (avoids per-card API calls on Jobs page)."""
+    try:
+        mapping = await build_job_application_map()
+        return {
+            job_id: app.model_dump()
+            for job_id, app in mapping.items()
+        }
+    except ApplicationServiceError as exc:
+        raise HTTPException(status_code=503, detail={"message": str(exc)}) from exc
+
+
 @router.get("/applications", response_model=list[ApplicationDocument])
 async def get_applications(
     status: str | None = None,
@@ -92,6 +106,8 @@ async def get_applications(
     date_from: str | None = None,
     date_to: str | None = None,
     job_id: str | None = None,
+    page: int | None = Query(None, ge=1),
+    limit: int | None = Query(None, ge=1, le=500),
 ) -> list[ApplicationDocument]:
     try:
         if job_id:
@@ -104,6 +120,8 @@ async def get_applications(
             min_match=min_match,
             date_from=date_from,
             date_to=date_to,
+            page=page,
+            limit=limit,
         )
     except ApplicationServiceError as exc:
         raise HTTPException(status_code=503, detail={"message": str(exc)}) from exc

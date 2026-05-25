@@ -3,6 +3,7 @@ import { ArrowLeft, Briefcase, Loader2 } from "lucide-react"
 
 import { useAuth } from "@/context/AuthContext"
 import { Button } from "@/components/ui/button"
+import { PasswordInput } from "@/components/ui/PasswordInput"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import * as authApi from "@/services/authService"
 
@@ -223,14 +224,13 @@ export function AuthPage({ onBack }) {
             <form onSubmit={onLogin} className="space-y-4">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Password</label>
-                <input
-                  type="password"
+                <PasswordInput
                   required
                   autoFocus
                   autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className={inputClass}
+                  inputClassName={inputClass}
                 />
               </div>
               <div className="flex justify-end">
@@ -266,14 +266,13 @@ export function AuthPage({ onBack }) {
               </div>
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Create password</label>
-                <input
-                  type="password"
+                <PasswordInput
                   required
                   minLength={8}
                   autoComplete="new-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className={inputClass}
+                  inputClassName={inputClass}
                 />
                 <p className="text-xs text-muted-foreground">At least 8 characters</p>
               </div>
@@ -311,14 +310,13 @@ export function AuthPage({ onBack }) {
               </div>
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">New password</label>
-                <input
-                  type="password"
+                <PasswordInput
                   required
                   minLength={8}
                   autoComplete="new-password"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  className={inputClass}
+                  inputClassName={inputClass}
                 />
               </div>
               <div className="flex justify-end">

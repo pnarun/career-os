@@ -33,6 +33,13 @@ def _get_resumes_collection() -> AsyncIOMotorCollection:
     return get_database()[RESUMES_COLLECTION]
 
 
+async def ensure_resume_indexes() -> None:
+    collection = _get_resumes_collection()
+    await collection.create_index("user_id")
+    await collection.create_index([("user_id", 1), ("created_at", -1)])
+    await collection.create_index([("user_id", 1), ("uploaded_at", -1)])
+
+
 def build_resume_create(
     upload_result: ResumeUploadResult,
     parsed_profile: ParsedResumeProfile,

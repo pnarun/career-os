@@ -47,7 +47,7 @@ def compute_ats_score(resume: ResumeDocument, *, job_description: str = "") -> d
         "action_verbs": min(100, verbs["strong_verb_count"] * 8),
         "measurable_impact": min(100, verbs["metric_count"] * 15),
         "readability": readability_sc,
-        "role_alignment": keyword_score if job_description else 70,
+        "role_alignment": keyword_score,
     }
 
     return {

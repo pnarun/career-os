@@ -1,17 +1,11 @@
 import {
   BarChart3,
   Briefcase,
-  Bot,
-  Bell,
   FileText,
   LayoutDashboard,
-  MessageSquare,
-  Mic,
   Radar,
   Send,
   Settings,
-  Sparkles,
-  Target,
   X,
 } from "lucide-react"
 
@@ -19,57 +13,28 @@ import { cn } from "@/lib/utils"
 
 export type AppPage =
   | "dashboard"
-  | "resume"
-  | "resume-ai"
-  | "match"
-  | "jobs"
-  | "applications"
-  | "notifications"
-  | "automation"
-  | "interview-prep"
-  | "career-analytics"
-  | "career-copilot"
-  | "scans"
+  | "resume-hub"
+  | "jobs-hub"
+  | "career-hub"
+  | "insights-hub"
+  | "operations-hub"
   | "settings"
   | "profile"
 
 type NavItem = {
-  id: AppPage | "applications" | "scans"
+  id: AppPage
   label: string
   icon: typeof LayoutDashboard
-  enabled: boolean
 }
 
 const navItems: NavItem[] = [
-  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, enabled: true },
-  { id: "resume", label: "Resume", icon: FileText, enabled: true },
-  { id: "resume-ai", label: "Resume AI", icon: Sparkles, enabled: true },
-  { id: "interview-prep", label: "Interview Prep", icon: Mic, enabled: true },
-  { id: "career-analytics", label: "Career Analytics", icon: BarChart3, enabled: true },
-  { id: "career-copilot", label: "Career Copilot", icon: MessageSquare, enabled: true },
-  { id: "match", label: "Job Match", icon: Target, enabled: true },
-  { id: "jobs", label: "Jobs", icon: Briefcase, enabled: true },
-  { id: "automation", label: "Automation", icon: Bot, enabled: true },
-  { id: "applications", label: "Applications", icon: Send, enabled: true },
-  { id: "notifications", label: "Notifications", icon: Bell, enabled: true },
-  { id: "scans", label: "Scans", icon: Radar, enabled: true },
-  { id: "settings", label: "Settings", icon: Settings, enabled: true },
-]
-
-const enabledPages: AppPage[] = [
-  "dashboard",
-  "resume",
-  "resume-ai",
-  "interview-prep",
-  "career-analytics",
-  "career-copilot",
-  "match",
-  "jobs",
-  "applications",
-  "notifications",
-  "automation",
-  "scans",
-  "settings",
+  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { id: "resume-hub", label: "Resume", icon: FileText },
+  { id: "jobs-hub", label: "Jobs", icon: Briefcase },
+  { id: "career-hub", label: "Career Track", icon: Send },
+  { id: "insights-hub", label: "Intelligence", icon: BarChart3 },
+  { id: "operations-hub", label: "Scans & Automation", icon: Radar },
+  { id: "settings", label: "Settings", icon: Settings },
 ]
 
 type SidebarProps = {
@@ -87,10 +52,11 @@ export function Sidebar({
   onClose,
   navLocked = false,
 }: SidebarProps) {
-  const isItemEnabled = (id: string) => {
+  const isItemEnabled = (id: AppPage) => {
     if (!navLocked) return true
-    return id === "resume"
+    return id === "resume-hub"
   }
+
   return (
     <aside
       className={cn(
@@ -120,11 +86,8 @@ export function Sidebar({
 
       <nav className="flex-1 space-y-1 overflow-y-auto overscroll-contain p-3 sm:p-4">
         {navItems.map((item) => {
-          const itemEnabled = item.enabled && isItemEnabled(item.id)
-          const isActive =
-            itemEnabled && enabledPages.includes(item.id as AppPage)
-              ? activePage === item.id
-              : false
+          const itemEnabled = isItemEnabled(item.id)
+          const isActive = itemEnabled && activePage === item.id
 
           return (
             <button
@@ -133,9 +96,7 @@ export function Sidebar({
               data-tour-id={item.id}
               disabled={!itemEnabled}
               onClick={() => {
-                if (itemEnabled && enabledPages.includes(item.id as AppPage)) {
-                  onNavigate(item.id as AppPage)
-                }
+                if (itemEnabled) onNavigate(item.id)
               }}
               className={cn(
                 "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",

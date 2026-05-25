@@ -23,7 +23,7 @@ class UserPreferencesCreate(BaseModel):
     resume_id: str
     scan_time: str = "08:00"
     timezone: str = "Asia/Kolkata"
-    frequency: str = "daily"
+    frequency: str = "every_6h"
     is_active: bool = True
     email_notifications: bool = True
     in_app_notifications: bool = True
@@ -45,6 +45,9 @@ class UserPreferencesCreate(BaseModel):
     interview_reminders: bool = True
     scan_completion_alerts: bool = True
     auto_email_on_scan: bool = True
+    target_roles: list[str] = Field(default_factory=list)
+    years_experience: int = Field(default=0, ge=0, le=50)
+    use_default_six_hour_schedule: bool = True
 
 
 class UserPreferencesUpdate(BaseModel):
@@ -76,6 +79,9 @@ class UserPreferencesUpdate(BaseModel):
     interview_reminders: bool | None = None
     scan_completion_alerts: bool | None = None
     auto_email_on_scan: bool | None = None
+    target_roles: list[str] | None = None
+    years_experience: int | None = Field(default=None, ge=0, le=50)
+    use_default_six_hour_schedule: bool | None = None
 
 
 class UserPreferencesDocument(BaseModel):
@@ -114,6 +120,9 @@ class UserPreferencesDocument(BaseModel):
     interview_reminders: bool = True
     scan_completion_alerts: bool = True
     auto_email_on_scan: bool = True
+    target_roles: list[str] = Field(default_factory=list)
+    years_experience: int = Field(default=0, ge=0, le=50)
+    use_default_six_hour_schedule: bool = True
 
     @classmethod
     def from_mongo(cls, document: dict[str, Any]) -> "UserPreferencesDocument":
@@ -127,7 +136,7 @@ class UserPreferencesDocument(BaseModel):
             resume_id=document["resume_id"],
             scan_time=document.get("scan_time", "08:00"),
             timezone=document.get("timezone", "Asia/Kolkata"),
-            frequency=document.get("frequency", "daily"),
+            frequency=document.get("frequency", "every_6h"),
             is_active=document.get("is_active", True),
             created_at=document["created_at"],
             updated_at=document["updated_at"],
@@ -153,4 +162,7 @@ class UserPreferencesDocument(BaseModel):
             interview_reminders=document.get("interview_reminders", True),
             scan_completion_alerts=document.get("scan_completion_alerts", True),
             auto_email_on_scan=document.get("auto_email_on_scan", True),
+            target_roles=list(document.get("target_roles") or []),
+            years_experience=int(document.get("years_experience") or 0),
+            use_default_six_hour_schedule=document.get("use_default_six_hour_schedule", True),
         )

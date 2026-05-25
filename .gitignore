@@ -2,6 +2,9 @@
 .env
 .env.local
 .env.*.local
+frontend/.env
+frontend/.env.local
+frontend/.env.production.local
 backend/.env
 backend/.env.development
 backend/.env.production

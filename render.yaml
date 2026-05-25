@@ -1,0 +1,60 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+# Deploy: connect this repo in Render → New → Blueprint → select render.yaml
+#
+# After deploy, set secrets in the dashboard (MONGO_URI, JWT_SECRET_KEY, etc.)
+# and FRONTEND_URL to your Vercel production URL.
+
+services:
+  - type: web
+    name: career-os-api
+    runtime: docker
+    plan: starter
+    region: singapore
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /health
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: LOG_LEVEL
+        value: INFO
+      - key: REDIS_ENABLED
+        value: "false"
+      - key: CELERY_ENABLED
+        value: "false"
+      - key: QUEUE_SCANS_ENABLED
+        value: "false"
+      - key: RATE_LIMIT_ENABLED
+        value: "true"
+      - key: PLAYWRIGHT_HEADLESS
+        value: "true"
+      - key: AUTH_DEV_EXPOSE_OTP
+        value: "false"
+      - key: AUTH_SEED_DEMO_USERS
+        value: "false"
+      - key: MONGO_URI
+        sync: false
+      - key: JWT_SECRET_KEY
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: CORS_ORIGIN_REGEX
+        value: "https://.*\\.vercel\\.app"
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM_EMAIL
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+
+  # Optional: uncomment after creating a Render Redis instance
+  # - type: redis
+  #   name: career-os-redis
+  #   plan: starter
+  #   ipAllowList: []

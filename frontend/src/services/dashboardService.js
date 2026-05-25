@@ -1,12 +1,5 @@
-import { getApplicationAnalytics, getApplications } from "@/services/applicationService"
-import { getJobsFeed } from "@/services/jobFeedService"
-import {
-  getAutomationAnalytics,
-  getCareerInsights,
-  getUnreadCount,
-} from "@/services/notificationService"
-import { getLatestScanAnalytics } from "@/services/scanAnalyticsService"
-import { apiFetch } from "@/lib/apiClient"
+import { apiFetch, parseErrorMessage } from "@/lib/apiClient"
+import { getCareerInsights } from "@/services/notificationService"
 
 async function getCareerGrowthSummary() {
   try {
@@ -33,124 +26,84 @@ function settle(promise, fallback) {
 }
 
 /**
- * Aggregate live data for the home dashboard.
+ * Fast core dashboard payload (single lightweight API).
  */
-export async function getDashboardSummary() {
-  const [
-    scan,
-    applicationAnalytics,
-    feed,
-    unread,
-    automation,
-    growth,
-    weekly,
-    applications,
-    insights,
-  ] = await Promise.all([
-    settle(getLatestScanAnalytics(), null),
-    settle(getApplicationAnalytics(), null),
-    settle(getJobsFeed(), { jobs: [], total_jobs: 0 }),
-    settle(getUnreadCount(), { unread_count: 0 }),
-    settle(getAutomationAnalytics(5), null),
+export async function getDashboardCore() {
+  const response = await apiFetch("/dashboard/summary")
+  if (!response.ok) {
+    throw new Error(await parseErrorMessage(response))
+  }
+  const data = await response.json()
+  return {
+    scan: data.scan,
+    applicationAnalytics: data.application_analytics,
+    feed: {
+      totalJobs: data.feed?.total_jobs ?? 0,
+      highMatches: data.feed?.high_matches ?? 0,
+      easyApply: data.feed?.easy_apply ?? 0,
+      scanId: data.feed?.scan_id ?? "",
+      scanTimestamp: data.feed?.scan_timestamp ?? "",
+      topJobs: data.feed?.top_jobs ?? [],
+    },
+    unreadCount: data.unread_count ?? 0,
+    automation: data.automation,
+    recentApplications: data.recent_applications ?? [],
+    scanStatus: data.scan_status ?? "Idle",
+    growth: null,
+    weekly: null,
+    insights: [],
+  }
+}
+
+/**
+ * Lazy-loaded analytics sections (not fetched on initial mount).
+ */
+export async function getDashboardInsights() {
+  const [growth, weekly, insights] = await Promise.all([
     settle(getCareerGrowthSummary(), null),
     settle(getWeeklyInsights(), null),
-    settle(getApplications(), []),
     settle(getCareerInsights(3), []),
   ])
+  return { growth, weekly, insights }
+}
 
-  const jobs = feed.jobs ?? []
-  const totalJobs = feed.total_jobs ?? jobs.length
-  const highMatches = jobs.filter((j) => (j.match_percentage ?? 0) >= 75).length
-  const easyApply = jobs.filter((j) => j.easy_apply).length
-  const topJobs = [...jobs]
-    .sort((a, b) => (b.match_percentage ?? 0) - (a.match_percentage ?? 0))
-    .slice(0, 5)
-
-  const recentApplications = [...applications]
-    .sort((a, b) => String(b.updated_at || b.applied_at || "").localeCompare(String(a.updated_at || a.applied_at || "")))
-    .slice(0, 5)
-
-  const scanStatus = automation?.recent_runs?.length
-    ? automation.recent_runs[0].status ?? "Active"
-    : scan?.qualified_jobs
-      ? "Ready"
-      : "Idle"
-
-  return {
-    scan,
-    applicationAnalytics,
-    feed: {
-      totalJobs,
-      highMatches,
-      easyApply,
-      scanId: feed.scan_id ?? scan?.scan_id ?? "",
-      scanTimestamp: feed.scan_timestamp ?? scan?.scan_timestamp ?? "",
-      topJobs,
-    },
-    unreadCount: unread.unread_count ?? 0,
-    automation,
-    growth,
-    weekly,
-    recentApplications,
-    insights,
-    scanStatus,
-  }
+/** @deprecated Use getDashboardCore + getDashboardInsights for progressive load */
+export async function getDashboardSummary() {
+  const core = await getDashboardCore()
+  const extra = await getDashboardInsights()
+  return { ...core, ...extra }
 }
 
 export const QUICK_LINKS = [
   {
-    id: "jobs",
+    id: "jobs-hub",
     label: "Jobs",
     description: "Browse and filter your latest scan matches",
     accent: "text-sky-400",
   },
   {
-    id: "applications",
-    label: "Applications",
-    description: "Track saved jobs, applications, and interview stages",
+    id: "career-hub",
+    label: "Career Track",
+    description: "Applications CRM and interview preparation",
     accent: "text-indigo-400",
   },
   {
-    id: "career-analytics",
-    label: "Career Analytics",
-    description: "Market trends, salary insights, and growth score",
+    id: "insights-hub",
+    label: "Intelligence",
+    description: "Analytics, salary insights, and Career Copilot",
     accent: "text-teal-400",
   },
   {
-    id: "interview-prep",
-    label: "Interview Prep",
-    description: "Mock interviews and readiness for saved roles",
-    accent: "text-violet-400",
-  },
-  {
-    id: "resume-ai",
-    label: "Resume AI",
-    description: "ATS scoring, keywords, and job-specific tailoring",
+    id: "resume-hub",
+    label: "Resume",
+    description: "Upload resume and run ATS scoring",
     accent: "text-amber-400",
   },
   {
-    id: "scans",
-    label: "Scans",
-    description: "Run scans, scheduling, history, and email delivery",
+    id: "operations-hub",
+    label: "Scans & Automation",
+    description: "Scheduled scans, sessions, and notifications",
     accent: "text-emerald-400",
-  },
-  {
-    id: "automation",
-    label: "Automation",
-    description: "Browser sessions for LinkedIn and provider login",
-    accent: "text-cyan-400",
-  },
-  {
-    id: "notifications",
-    label: "Notifications",
-    description: "High-match alerts, digests, and career insights",
-    accent: "text-rose-400",
-  },
-  {
-    id: "career-copilot",
-    label: "Career Copilot",
-    description: "Ask career questions and get grounded AI guidance",
-    accent: "text-indigo-400",
   },
   {
     id: "settings",

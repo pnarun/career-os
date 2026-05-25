@@ -123,11 +123,17 @@ def validate_session_file(platform: str, user_id: str | None = None) -> dict[str
     }
 
 
+def _metadata_key(platform: str, user_id: str | None = None) -> str:
+    uid = user_id or get_request_user_id() or "anonymous"
+    return f"{uid}:{normalize_platform(platform)}"
+
+
 def get_session_metadata(platform: str) -> dict[str, Any]:
     """Return merged metadata + validation for one platform."""
     key = normalize_platform(platform)
-    stored = _read_metadata_file().get(key, {})
-    validation = validate_session_file(key)
+    user_id = get_request_user_id()
+    stored = _read_metadata_file().get(_metadata_key(key, user_id), {})
+    validation = validate_session_file(key, user_id)
 
     status: SessionStatus = validation["status"]
     if validation["status"] == "ready" and stored.get("last_saved_at"):
@@ -147,15 +153,17 @@ def get_session_metadata(platform: str) -> dict[str, Any]:
 def refresh_session_metadata(platform: str) -> dict[str, Any]:
     """Re-scan session file and persist metadata entry."""
     key = normalize_platform(platform)
-    validation = validate_session_file(key)
+    user_id = get_request_user_id()
+    validation = validate_session_file(key, user_id)
     meta = _read_metadata_file()
+    meta_key = _metadata_key(key, user_id)
 
     entry: dict[str, Any] = {
         "exists": validation["exists"],
         "cookie_count": validation["cookie_count"],
         "storage_size_kb": validation["storage_size_kb"],
         "status": validation["status"],
-        "last_saved_at": meta.get(key, {}).get("last_saved_at"),
+        "last_saved_at": meta.get(meta_key, {}).get("last_saved_at"),
     }
 
     if validation["status"] == "ready":
@@ -164,7 +172,7 @@ def refresh_session_metadata(platform: str) -> dict[str, Any]:
     elif validation["status"] == "none":
         entry = dict(_EMPTY_ENTRY)
 
-    meta[key] = entry
+    meta[meta_key] = entry
     _write_metadata_file(meta)
     logger.info(
         "[AUTOMATION][SESSION_META] refreshed platform=%s status=%s cookies=%d",
@@ -190,7 +198,7 @@ def delete_session(platform: str, user_id: str | None = None) -> dict[str, Any]:
             raise RuntimeError(f"Could not delete session file: {exc}") from exc
 
     meta = _read_metadata_file()
-    meta[key] = dict(_EMPTY_ENTRY)
+    meta[_metadata_key(key, uid)] = dict(_EMPTY_ENTRY)
     _write_metadata_file(meta)
 
     return get_session_metadata(key)
@@ -200,17 +208,18 @@ def get_all_sessions_status() -> dict[str, dict[str, Any]]:
     """Status for every supported platform (API shape)."""
     result: dict[str, dict[str, Any]] = {}
     meta = _read_metadata_file()
+    user_id = get_request_user_id()
 
     for platform in sorted(SUPPORTED_PLATFORMS):
-        validation = validate_session_file(platform)
-        stored = meta.get(platform, {})
+        validation = validate_session_file(platform, user_id)
+        stored = meta.get(_metadata_key(platform, user_id), {})
 
         status: SessionStatus = validation["status"]
         last_saved = stored.get("last_saved_at")
 
         if validation["status"] == "ready":
             if not last_saved:
-                path = _session_path(platform, uid)
+                path = _session_path(platform, user_id)
                 if path.is_file():
                     mtime = datetime.fromtimestamp(
                         path.stat().st_mtime,

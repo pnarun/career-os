@@ -23,6 +23,7 @@ def _patch_lifecycle():
         patch("app.main.ensure_preferences_indexes", new=AsyncMock()),
         patch("app.main.ensure_scan_session_indexes", new=AsyncMock()),
         patch("app.main.ensure_job_indexes", new=AsyncMock()),
+        patch("app.main.ensure_resume_indexes", new=AsyncMock()),
         patch("app.main.ensure_application_indexes", new=AsyncMock()),
         patch("app.main.ensure_notification_indexes", new=AsyncMock()),
         patch("app.main.ensure_career_insight_indexes", new=AsyncMock()),

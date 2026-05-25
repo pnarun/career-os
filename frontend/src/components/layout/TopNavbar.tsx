@@ -15,49 +15,25 @@ const pageMeta: Record<AppPage, { title: string; description: string }> = {
     title: "Dashboard",
     description: "Live stats, top matches, and quick links across Career OS",
   },
-  resume: {
-    title: "Resume Intelligence",
-    description: "Upload and analyze the candidate resume",
+  "resume-hub": {
+    title: "Resume",
+    description: "Upload your resume and run ATS scoring, keywords, and tailoring",
   },
-  "resume-ai": {
-    title: "Resume AI",
-    description: "ATS scoring, keyword optimization, and tailored resume intelligence",
-  },
-  "interview-prep": {
-    title: "Interview Prep",
-    description: "Readiness scoring, mock interviews, and preparation plans",
-  },
-  "career-analytics": {
-    title: "Career Analytics",
-    description: "Market intelligence, salary insights, and career growth analytics",
-  },
-  "career-copilot": {
-    title: "Career Copilot",
-    description: "AI career assistant grounded in your jobs, resume, and analytics",
-  },
-  match: {
-    title: "Job Match",
-    description: "Compare resume skills against job descriptions",
-  },
-  jobs: {
+  "jobs-hub": {
     title: "Jobs",
     description: "Discover and match engineering roles",
   },
-  applications: {
-    title: "Applications",
-    description: "Track saved jobs, applications, and career progress",
+  "career-hub": {
+    title: "Career Track",
+    description: "Applications CRM and interview preparation",
   },
-  notifications: {
-    title: "Notifications",
-    description: "Alerts, digests, reminders, and career insights",
+  "insights-hub": {
+    title: "Career Intelligence",
+    description: "Market analytics and AI career copilot",
   },
-  automation: {
-    title: "Automation",
-    description: "Browser automation and session management",
-  },
-  scans: {
-    title: "Automation & Scan Center",
-    description: "Run scans, scheduling, history, email delivery, and provider diagnostics",
+  "operations-hub": {
+    title: "Scans & Automation",
+    description: "Scheduled scans, browser sessions, and notifications",
   },
   settings: {
     title: "Settings",

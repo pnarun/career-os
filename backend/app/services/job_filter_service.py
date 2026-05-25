@@ -3,7 +3,7 @@ from typing import Literal, TypedDict
 
 logger = logging.getLogger(__name__)
 
-RejectionReason = Literal["location_filter", "non_engineering"]
+RejectionReason = Literal["location_filter"]
 
 # In-memory ring buffer for temporary diagnostics (not persisted).
 _REJECTION_LOG_BUFFER: list[dict[str, str]] = []
@@ -25,9 +25,13 @@ INDIA_LOCATION_KEYWORDS = (
     "ahmedabad",
     "bombay",
     "ncr",
+    "karnataka",
+    "maharashtra",
+    "tamil nadu",
+    "telangana",
 )
 
-REJECT_LOCATION_KEYWORDS = (
+FOREIGN_ONSITE_KEYWORDS = (
     "germany",
     "austria",
     "france",
@@ -48,51 +52,35 @@ REJECT_LOCATION_KEYWORDS = (
     "italy",
     "uk only",
     "united kingdom only",
+    "london, uk",
+    "london, england",
+    "manchester, uk",
+    "united states",
+    "united states of america",
+    "usa",
+    ", us",
+    " u.s.",
+    "new york",
+    "san francisco",
+    "california",
+    "texas",
+    "seattle",
+    "boston",
+    "chicago",
+    "austin",
+    "denver",
+    "atlanta",
+    "washington dc",
+    "canada",
+    "toronto",
+    "vancouver",
+    "montreal",
+    "sydney",
+    "melbourne",
+    "singapore only",
 )
 
-REMOTE_KEYWORDS = (
-    "remote",
-    "work from home",
-    "work-from-home",
-    "wfh",
-    "anywhere",
-    "distributed team",
-    "distributed",
-    "fully remote",
-    "remote-first",
-    "remote first",
-    "global remote",
-)
-
-ENGINEERING_ALLOW_KEYWORDS = (
-    "software engineer",
-    "software engineering",
-    "full stack",
-    "fullstack",
-    "backend",
-    "frontend",
-    "front-end",
-    "back-end",
-    "devops",
-    "cloud",
-    "platform engineer",
-    "site reliability",
-    "sre",
-    "automation engineer",
-    "ai engineer",
-    "ml engineer",
-    "machine learning engineer",
-    "python developer",
-    "react developer",
-    "node.js",
-    "nodejs",
-    "fastapi",
-    "aws",
-    "developer",
-    "engineering",
-    "software development",
-)
-
+# Soft signals for quality scoring only — not used to drop jobs from the feed.
 ENGINEERING_REJECT_KEYWORDS = (
     "finance manager",
     "financial analyst",
@@ -118,6 +106,21 @@ ENGINEERING_REJECT_KEYWORDS = (
     "business development",
     "legal counsel",
     "compliance officer",
+)
+
+REMOTE_KEYWORDS = (
+    "remote",
+    "work from home",
+    "work-from-home",
+    "wfh",
+    "anywhere",
+    "distributed team",
+    "distributed",
+    "fully remote",
+    "remote-first",
+    "remote first",
+    "global remote",
+    "work from anywhere",
 )
 
 
@@ -158,48 +161,72 @@ def is_india_location_job(job: FilterableJob) -> bool:
     return any(keyword in text for keyword in INDIA_LOCATION_KEYWORDS)
 
 
-def _is_rejected_international_only(job: FilterableJob) -> bool:
-    """Reject Europe/international-only roles without India or remote signals."""
+def _has_foreign_onsite_signal(job: FilterableJob) -> bool:
+    """True when location text clearly points to a non-India, non-remote onsite role."""
     text = _job_text(job)
-
-    if not any(keyword in text for keyword in REJECT_LOCATION_KEYWORDS):
+    if not text.strip():
         return False
+    return any(keyword in text for keyword in FOREIGN_ONSITE_KEYWORDS)
 
+
+def is_foreign_onsite_only(job: FilterableJob) -> bool:
+    """Foreign location without India or remote — not actionable for most Indian applicants."""
     if is_india_location_job(job) or is_remote_job(job):
         return False
+    return _has_foreign_onsite_signal(job)
 
-    return True
+
+def is_actionable_for_india_user(job: FilterableJob) -> bool:
+    """User can realistically apply: India onsite/hybrid or remote; not foreign onsite."""
+    if is_foreign_onsite_only(job):
+        return False
+    if is_india_location_job(job) or is_remote_job(job):
+        return True
+    # Unknown/empty location: keep visible but not promoted as high-match India role
+    return not _has_foreign_onsite_signal(job)
 
 
 def is_india_or_remote_job(job: FilterableJob) -> bool:
-    """Allow India-based or remote-friendly engineering opportunities."""
-    if _is_rejected_international_only(job):
-        return False
-
+    """Legacy helper — India or remote-friendly."""
     return is_india_location_job(job) or is_remote_job(job)
 
 
 def is_relevant_engineering_job(job: FilterableJob) -> bool:
-    """Allow engineering roles and reject unrelated business functions."""
+    """Soft signal for quality scoring only — not used to drop jobs from the feed."""
     text = _job_text(job)
-
-    if any(keyword in text for keyword in ENGINEERING_REJECT_KEYWORDS):
-        return False
-
-    return any(keyword in text for keyword in ENGINEERING_ALLOW_KEYWORDS)
+    engineering_hints = (
+        "developer",
+        "engineer",
+        "engineering",
+        "architect",
+        "devops",
+        "sre",
+        "full stack",
+        "fullstack",
+        "software",
+        "backend",
+        "frontend",
+        "consultant",
+        "analyst",
+        "manager",
+        "lead",
+        "specialist",
+    )
+    return any(hint in text for hint in engineering_hints)
 
 
 def get_rejection_reason(job: FilterableJob) -> RejectionReason | None:
-    """Return why a job failed filters, or None if it passes."""
-    if not is_relevant_engineering_job(job):
-        return "non_engineering"
-    if not is_india_or_remote_job(job):
+    """
+    Hard reject only clear foreign onsite roles (no India, no remote).
+    All other jobs pass through for match scoring and sorting.
+    """
+    if is_foreign_onsite_only(job):
         return "location_filter"
     return None
 
 
 def passes_job_filters(job: FilterableJob) -> bool:
-    """Single gate for India/remote + engineering relevance."""
+    """Location gate for fetch pipeline — does not filter by role or skills."""
     return get_rejection_reason(job) is None
 
 
@@ -217,10 +244,8 @@ def log_rejected_job(job: FilterableJob, rejection_reason: RejectionReason) -> N
     if len(_REJECTION_LOG_BUFFER) > _REJECTION_LOG_MAX:
         del _REJECTION_LOG_BUFFER[: len(_REJECTION_LOG_BUFFER) - _REJECTION_LOG_MAX]
 
-    tag = "LOCATION" if rejection_reason == "location_filter" else "NON_ENGINEERING"
     logger.warning(
-        "[REJECTED][%s]\n%s\n%s — %s\nsource=%s",
-        tag,
+        "[REJECTED][LOCATION]\n%s\n%s — %s\nsource=%s",
         entry["title"],
         entry["company"],
         entry["location"] or "N/A",
@@ -239,12 +264,14 @@ def enrich_job_filter_metadata(job: FilterableJob) -> dict:
         **job,
         "remote_priority": is_remote_job(job),
         "india_focused": is_india_location_job(job),
+        "actionable_in_india": is_actionable_for_india_user(job),
+        "foreign_onsite_only": is_foreign_onsite_only(job),
     }
 
 
 def filter_normalized_jobs(jobs: list[dict]) -> tuple[list[dict], int]:
     """
-    Filter normalized jobs through India/remote and engineering rules.
+    Drop only foreign onsite roles (no India, no remote).
     Returns (accepted_jobs, rejected_count).
     """
     accepted: list[dict] = []
@@ -259,7 +286,7 @@ def filter_normalized_jobs(jobs: list[dict]) -> tuple[list[dict], int]:
             rejected_count += 1
 
     logger.info(
-        "Job filter applied: accepted=%d rejected=%d",
+        "Job location filter: accepted=%d rejected_foreign_onsite=%d",
         len(accepted),
         rejected_count,
     )

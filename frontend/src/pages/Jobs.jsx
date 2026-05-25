@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
-import { useRealtimeOptional } from "@/context/RealtimeContext"
+import { memo, useCallback, useEffect, useMemo, useState } from "react"
+import { useFeedVersion } from "@/context/RealtimeContext"
+import { useDebounce } from "@/hooks/useDebounce"
+import { VirtualizedJobGrid } from "@/components/VirtualizedJobGrid"
 import {
   AlertCircle,
   Briefcase,
@@ -133,7 +135,7 @@ function SkillTags({ items, variant }) {
   )
 }
 
-function JobCard({ job, showScanMeta, showQualityDebug, onViewDetails }) {
+const JobCard = memo(function JobCard({ job, showScanMeta, showQualityDebug, onViewDetails }) {
   const variant = getMatchBadgeVariant(job.recommendation)
   const locationCategory = getLocationCategory(job)
   const qualityScore = getJobQualityScore(job)
@@ -287,7 +289,7 @@ function JobCard({ job, showScanMeta, showQualityDebug, onViewDetails }) {
       </CardFooter>
     </Card>
   )
-}
+})
 
 export function Jobs() {
   const [displayJobs, setDisplayJobs] = useState([])
@@ -315,7 +317,8 @@ export function Jobs() {
   const [strongMatchesOnly, setStrongMatchesOnly] = useState(false)
   const [remoteHighMatch, setRemoteHighMatch] = useState(false)
   const [easyApplyHighMatch, setEasyApplyHighMatch] = useState(false)
-  const realtime = useRealtimeOptional()
+  const feedVersion = useFeedVersion()
+  const debouncedKeyword = useDebounce(keyword, 400)
 
   const buildFeedFilters = useCallback(
     () => ({
@@ -323,7 +326,7 @@ export function Jobs() {
       remoteOnly,
       easyApplyOnly,
       minMatch: minMatch > 0 ? minMatch : undefined,
-      keyword,
+      keyword: debouncedKeyword,
       sort: sortBy,
       strongMatchesOnly,
       remoteHighMatch,
@@ -334,7 +337,7 @@ export function Jobs() {
       remoteOnly,
       easyApplyOnly,
       minMatch,
-      keyword,
+      debouncedKeyword,
       sortBy,
       strongMatchesOnly,
       remoteHighMatch,
@@ -445,7 +448,7 @@ export function Jobs() {
     remoteOnly,
     easyApplyOnly,
     minMatch,
-    keyword,
+    debouncedKeyword,
     sortBy,
     strongMatchesOnly,
     remoteHighMatch,
@@ -454,9 +457,9 @@ export function Jobs() {
   ])
 
   useEffect(() => {
-    if (historicalMode || !realtime?.feedVersion) return
+    if (historicalMode || !feedVersion) return
     loadUnifiedFeed().catch(() => {})
-  }, [realtime?.feedVersion, historicalMode, loadUnifiedFeed])
+  }, [feedVersion, historicalMode, loadUnifiedFeed])
 
   useEffect(() => {
     if (!historicalMode) return
@@ -847,17 +850,17 @@ export function Jobs() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {filteredJobs.map((job) => (
+        <VirtualizedJobGrid
+          jobs={filteredJobs}
+          renderCard={(job) => (
             <JobCard
-              key={job.id}
               job={job}
               showScanMeta={historicalMode}
               showQualityDebug={historicalMode}
               onViewDetails={setSelectedJob}
             />
-          ))}
-        </div>
+          )}
+        />
       )}
       <DebugSummaryPanel
         historicalMode={historicalMode}

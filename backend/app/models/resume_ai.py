@@ -81,6 +81,9 @@ class TailorResumeResponse(BaseModel):
     ats_score_before: int
     ats_score_tailored: int
     projected_ats_score: int
+    improvement_potential_percent: int = 0
+    improvement_summary: str = ""
+    genuine_missing_skills: list[str] = Field(default_factory=list)
     optimization_plan: list[dict[str, str]] = Field(default_factory=list)
     alignment: dict[str, Any] = Field(default_factory=dict)
     feedback: dict[str, Any] = Field(default_factory=dict)

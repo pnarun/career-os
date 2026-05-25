@@ -5,8 +5,6 @@ import {
   clearNewUserRegistration,
   clearResumeGateSkipped,
   isNewUserRegistration,
-  isResumeGateSkipped,
-  markResumeGateSkipped,
 } from "@/lib/newUserOnboarding"
 import { shouldShowPlatformTour } from "@/lib/platformTour"
 import { listResumes } from "@/services/preferencesService"
@@ -20,7 +18,7 @@ export function ResumeOnboardingProvider({ children }) {
   const [hasResume, setHasResume] = useState(false)
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
-  const [gateSkipped, setGateSkipped] = useState(false)
+  const [resumeGateEnforced, setResumeGateEnforced] = useState(false)
 
   const refreshResumes = useCallback(async () => {
     if (!userId) {
@@ -34,6 +32,8 @@ export function ResumeOnboardingProvider({ children }) {
       if (has) {
         clearNewUserRegistration()
         clearResumeGateSkipped(userId)
+        setResumeGateEnforced(false)
+        setShowModal(false)
       }
       return has
     } catch {
@@ -46,44 +46,38 @@ export function ResumeOnboardingProvider({ children }) {
       setHasResume(false)
       setLoading(false)
       setShowModal(false)
-      setGateSkipped(false)
+      setResumeGateEnforced(false)
       return
     }
 
-    setGateSkipped(isResumeGateSkipped(userId))
     setLoading(true)
     refreshResumes().finally(() => setLoading(false))
   }, [isAuthenticated, userId, refreshResumes])
 
   const isNewUserFlow = isNewUserRegistration()
-  const gateActive = isNewUserFlow && !hasResume && gateSkipped
+  const gateActive = isNewUserFlow && !hasResume && resumeGateEnforced
 
   const notifyTourClosed = useCallback(() => {
-    if (!userId || hasResume || !isNewUserRegistration() || isResumeGateSkipped(userId)) {
+    if (!userId || hasResume || !isNewUserRegistration()) {
       return
     }
     setShowModal(true)
   }, [userId, hasResume])
 
   useEffect(() => {
-    if (loading || !userId || hasResume || !isNewUserFlow || gateSkipped || showModal) return
+    if (loading || !userId || hasResume || !isNewUserFlow || showModal) return
     if (shouldShowPlatformTour(userId)) return
     setShowModal(true)
-  }, [loading, userId, hasResume, isNewUserFlow, gateSkipped, showModal])
+  }, [loading, userId, hasResume, isNewUserFlow, showModal])
 
-  const skipGate = useCallback(() => {
-    if (userId) markResumeGateSkipped(userId)
-    setGateSkipped(true)
-    setShowModal(false)
-  }, [userId])
-
-  const dismissModalForUpload = useCallback(() => {
+  const acknowledgeResumeRequired = useCallback(() => {
+    setResumeGateEnforced(true)
     setShowModal(false)
   }, [])
 
   const completeUpload = useCallback(() => {
     setHasResume(true)
-    setGateSkipped(false)
+    setResumeGateEnforced(false)
     clearNewUserRegistration()
     if (userId) clearResumeGateSkipped(userId)
     setShowModal(false)
@@ -92,7 +86,7 @@ export function ResumeOnboardingProvider({ children }) {
   const isPageAllowed = useCallback(
     (page) => {
       if (!gateActive) return true
-      return page === "resume"
+      return page === "resume-hub"
     },
     [gateActive]
   )
@@ -106,8 +100,7 @@ export function ResumeOnboardingProvider({ children }) {
       isNewUserFlow,
       refreshResumes,
       notifyTourClosed,
-      skipGate,
-      dismissModalForUpload,
+      acknowledgeResumeRequired,
       completeUpload,
       isPageAllowed,
     }),
@@ -119,8 +112,7 @@ export function ResumeOnboardingProvider({ children }) {
       isNewUserFlow,
       refreshResumes,
       notifyTourClosed,
-      skipGate,
-      dismissModalForUpload,
+      acknowledgeResumeRequired,
       completeUpload,
       isPageAllowed,
     ]

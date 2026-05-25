@@ -58,8 +58,9 @@ LOCATION_FILTERS = (
     "Bangalore",
 )
 
-MAX_VISIBLE_CARDS = 25
-MIN_CARDS_TARGET = 20
+MAX_VISIBLE_CARDS = 100
+MIN_CARDS_TARGET = 60
+SCROLL_MAX_ROUNDS = 18
 
 JOB_CARD_SELECTORS = (
     "li.jobs-search-results__list-item",
@@ -117,16 +118,34 @@ def _detect_session_invalid(page) -> str | None:
     return None
 
 
-def _location_matches_filters(location: str) -> bool:
-    text = location.lower()
-    if not text:
-        return True
-    hints = tuple(k.lower() for k in LOCATION_FILTERS)
-    if any(h in text for h in hints):
-        return True
-    if "india" in text or "remote" in text or "hybrid" in text:
-        return True
-    return False
+def _scroll_job_results(page, cards, target: int) -> None:
+    """Scroll the results list so LinkedIn loads more job cards."""
+    prev_count = 0
+    stable = 0
+    for _ in range(SCROLL_MAX_ROUNDS):
+        try:
+            page.evaluate(
+                """() => {
+                  const list = document.querySelector(
+                    '.jobs-search-results-list, .scaffold-layout__list, ul.scaffold-layout__list-container'
+                  );
+                  if (list) list.scrollTop = list.scrollHeight;
+                  window.scrollBy(0, 600);
+                }"""
+            )
+            _human_delay(350, 650)
+            count = cards.count()
+            if count >= target:
+                break
+            if count <= prev_count:
+                stable += 1
+                if stable >= 3:
+                    break
+            else:
+                stable = 0
+            prev_count = count
+        except Exception:
+            break
 
 
 def _extract_card_fields(card, page) -> dict[str, Any] | None:
@@ -294,6 +313,7 @@ def discover_linkedin_jobs_sync(payload: dict[str, Any] | None = None) -> dict[s
 
         extracted: list[dict[str, Any]] = []
         if cards is not None:
+            _scroll_job_results(page, cards, MAX_VISIBLE_CARDS)
             count = min(cards.count(), MAX_VISIBLE_CARDS)
             for i in range(count):
                 if len(extracted) >= MAX_VISIBLE_CARDS:
@@ -302,8 +322,6 @@ def discover_linkedin_jobs_sync(payload: dict[str, Any] | None = None) -> dict[s
                     card = cards.nth(i)
                     fields = _extract_card_fields(card, page)
                     if not fields:
-                        continue
-                    if not _location_matches_filters(fields.get("location", "")):
                         continue
                     extracted.append(fields)
                     _human_delay(80, 180)

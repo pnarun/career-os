@@ -33,6 +33,14 @@ KNOWN_PROVIDERS = (
 
 STRONG_MATCH_MIN = 75
 HIGH_MATCH_MIN = 60
+FEED_DESCRIPTION_MAX = 400
+
+
+def _truncate_description(text: str, max_len: int = FEED_DESCRIPTION_MAX) -> str:
+    cleaned = (text or "").strip()
+    if len(cleaned) <= max_len:
+        return cleaned
+    return cleaned[:max_len].rstrip() + "…"
 
 
 def apply_match_result_to_feed_job(
@@ -83,7 +91,7 @@ def document_to_feed_job(job: JobDocument) -> UnifiedFeedJob:
         title=job.title,
         company=job.company,
         location=job.location,
-        description=job.description,
+        description=_truncate_description(job.description),
         apply_url=job.apply_url,
         source=job.source,
         source_priority=get_source_priority(job.source),

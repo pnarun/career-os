@@ -4,7 +4,7 @@ from typing import Any
 
 from motor.motor_asyncio import AsyncIOMotorCollection
 
-from app.realtime.provider_status_stream import emit_provider_status
+from app.realtime.provider_status_stream import emit_provider_batch, emit_provider_status
 from app.realtime.scan_event_service import emit_ai_scoring_complete, emit_jobs_fetched
 from app.core.database import get_database
 from app.core.user_context import get_request_user_id, get_request_workspace_id
@@ -25,7 +25,7 @@ from app.services.job_sources.linkedin_playwright_source import (
 from app.services.job_sources.linkedin_search_context import build_search_keywords
 from app.services.scan_analytics_service import build_scan_summary
 from app.services.scan_session_service import save_scan_session
-from app.services.job_quality_service import filter_jobs_by_quality
+from app.services.job_quality_service import score_jobs_with_quality
 from app.services.match_engine_service import match_resume_to_job
 from app.services.job_match_scoring_service import ResumeProfile
 from app.services.resume_service import (
@@ -37,7 +37,7 @@ from app.services.resume_service import (
 logger = logging.getLogger(__name__)
 
 JOBS_COLLECTION = "jobs"
-SCAN_BATCH_LIMIT = 50
+SCAN_BATCH_LIMIT = 200
 HISTORY_DEBUG_LIMIT = 500
 
 # Sort: match % → quality score → remote priority → recency
@@ -83,10 +83,16 @@ async def ensure_job_indexes() -> None:
     collection = _get_jobs_collection()
     await collection.create_index("user_id")
     await collection.create_index([("user_id", 1), ("is_latest_scan", 1)])
+    await collection.create_index([("user_id", 1), ("apply_url", 1)])
+    await collection.create_index([("user_id", 1), ("title", 1), ("company", 1)])
+    await collection.create_index([("user_id", 1), ("created_at", -1)])
+    await collection.create_index([("user_id", 1), ("match_percentage", -1)])
+    await collection.create_index([("user_id", 1), ("source", 1)])
+    await collection.create_index([("user_id", 1), ("status", 1)])
 
 
 def _document_from_create(job_data: JobCreate) -> dict[str, Any]:
-    return {
+    document: dict[str, Any] = {
         "title": job_data.title,
         "company": job_data.company,
         "location": job_data.location,
@@ -138,6 +144,7 @@ def build_job_create(
         job_type=normalized_job["job_type"],
         remote_priority=normalized_job.get("remote_priority", False),
         india_focused=normalized_job.get("india_focused", False),
+        actionable_in_india=normalized_job.get("actionable_in_india", True),
         matched_skills=match_analysis["matched_skills"],
         missing_skills=match_analysis["missing_skills"],
         match_percentage=match_analysis["match_percentage"],
@@ -155,13 +162,15 @@ def build_job_create(
 
 
 def sort_job_documents(jobs: list[JobDocument]) -> list[JobDocument]:
-    """Sort jobs by match %, quality score, remote priority, then recency."""
+    """Sort jobs by match %, India-actionable, quality, remote, then recency."""
     return sorted(
         jobs,
         key=lambda job: (
             job.match_percentage,
+            int(getattr(job, "actionable_in_india", True)),
             job.job_quality_score,
             int(job.remote_priority),
+            int(job.india_focused),
             job.created_at,
         ),
         reverse=True,
@@ -209,17 +218,64 @@ async def start_new_scan_session() -> None:
         raise JobServiceError("Failed to start scan session") from exc
 
 
+class ShownJobCache:
+    """In-memory set of known jobs for the current scan (batch-loaded)."""
+
+    __slots__ = ("apply_urls", "title_company")
+
+    def __init__(self) -> None:
+        self.apply_urls: set[str] = set()
+        self.title_company: set[tuple[str, str]] = set()
+
+    def contains(self, apply_url: str, title: str, company: str) -> bool:
+        url = apply_url.strip()
+        if url and url in self.apply_urls:
+            return True
+        key = (title.strip().lower(), company.strip().lower())
+        return key in self.title_company
+
+
+async def load_shown_job_cache() -> ShownJobCache:
+    """Batch-load prior job keys to avoid N+1 find_one during scans."""
+    cache = ShownJobCache()
+    try:
+        collection = _get_jobs_collection()
+        cursor = collection.find(
+            _scoped_query(),
+            {"apply_url": 1, "title": 1, "company": 1},
+        )
+        async for doc in cursor:
+            url = (doc.get("apply_url") or "").strip()
+            if url:
+                cache.apply_urls.add(url)
+            title = (doc.get("title") or "").strip().lower()
+            company = (doc.get("company") or "").strip().lower()
+            if title and company:
+                cache.title_company.add((title, company))
+    except RuntimeError as exc:
+        raise JobServiceError("Database is not available") from exc
+    except Exception as exc:
+        logger.exception("Failed to preload shown job cache")
+        raise JobServiceError("Failed to preload job history") from exc
+    return cache
+
+
 async def was_job_already_shown(
     apply_url: str,
     title: str,
     company: str,
+    *,
+    cache: ShownJobCache | None = None,
 ) -> bool:
     """True if this job was stored in any prior scan (apply_url or title+company)."""
+    if cache is not None:
+        return cache.contains(apply_url, title, company)
     try:
         collection = _get_jobs_collection()
         if apply_url.strip():
             existing = await collection.find_one(
-                _scoped_query({"apply_url": apply_url.strip()})
+                _scoped_query({"apply_url": apply_url.strip()}),
+                {"_id": 1},
             )
             if existing:
                 return True
@@ -230,7 +286,8 @@ async def was_job_already_shown(
                     "title": title.strip(),
                     "company": company.strip(),
                 }
-            )
+            ),
+            {"_id": 1},
         )
         return existing is not None
     except RuntimeError as exc:
@@ -336,13 +393,23 @@ async def get_latest_scan_jobs() -> list[JobDocument]:
         raise JobServiceError("Failed to fetch latest scan jobs") from exc
 
 
-async def get_job_history(limit: int = HISTORY_DEBUG_LIMIT) -> list[JobHistoryItem]:
-    """Return recent job history for debug (ignores scan session flags)."""
+async def get_job_history(
+    *,
+    page: int = 1,
+    limit: int = 50,
+) -> tuple[list[JobHistoryItem], int]:
+    """Return paginated job history (ignores scan session flags)."""
+    page = max(1, page)
+    limit = min(max(1, limit), HISTORY_DEBUG_LIMIT)
+    skip = (page - 1) * limit
     try:
         collection = _get_jobs_collection()
-        cursor = collection.find(_scoped_query()).sort("created_at", -1).limit(limit)
+        query = _scoped_query()
+        total = await collection.count_documents(query)
+        cursor = collection.find(query).sort("created_at", -1).skip(skip).limit(limit)
         documents = await cursor.to_list(length=limit)
-        return [JobHistoryItem.from_mongo(doc) for doc in documents]
+        items = [JobHistoryItem.from_mongo(doc) for doc in documents]
+        return items, total
     except RuntimeError as exc:
         raise JobServiceError("Database is not available") from exc
     except Exception as exc:
@@ -383,7 +450,7 @@ async def _resolve_resume_for_scan(resume_id: str | None):
 
 async def discover_and_store_jobs(resume_id: str | None = None) -> ScanFetchResponse:
     """
-    Run a new scan session: fetch, filter, match, rank, store top 50 fresh jobs.
+    Run a new scan session: fetch, score, match, rank, store up to 200 fresh jobs.
     Previous MongoDB history is preserved; only latest scan is active in the feed.
     """
     scan_id = generate_scan_id()
@@ -400,45 +467,35 @@ async def discover_and_store_jobs(resume_id: str | None = None) -> ScanFetchResp
 
     user_id = get_request_user_id() or ""
     if user_id:
+        provider_batch: list[dict[str, Any]] = []
         for provider, count in (aggregation.sources or {}).items():
             status = "failed" if provider in aggregation.failed_sources else "success"
-            if status == "success":
-                await emit_jobs_fetched(
-                    user_id,
-                    provider=provider,
-                    count=int(count or 0),
-                    scan_id=scan_id,
-                )
-            else:
-                await emit_provider_status(
-                    user_id,
-                    provider=provider,
-                    status="failed",
-                    count=int(count or 0),
-                    error=aggregation.source_errors.get(provider, ""),
-                    scan_id=scan_id,
-                )
+            provider_batch.append(
+                {
+                    "provider": provider,
+                    "status": status,
+                    "count": int(count or 0),
+                    "error": aggregation.source_errors.get(provider, ""),
+                }
+            )
         if "linkedin" not in aggregation.sources:
             linkedin_meta = fetch_result.linkedin_fetch or {}
             linkedin_status = linkedin_meta.get("status", "")
             linkedin_count = int(linkedin_meta.get("count") or linkedin_meta.get("jobs_count") or 0)
-            if linkedin_status == "success" and linkedin_count:
-                await emit_jobs_fetched(
-                    user_id,
-                    provider="linkedin",
-                    count=linkedin_count,
-                    scan_id=scan_id,
+            if linkedin_status:
+                provider_batch.append(
+                    {
+                        "provider": "linkedin",
+                        "status": "success" if linkedin_status == "success" and linkedin_count else "failed",
+                        "count": linkedin_count,
+                        "error": str(linkedin_meta.get("error") or "LinkedIn fetch failed"),
+                    }
                 )
-            elif linkedin_status and linkedin_status != "success":
-                await emit_provider_status(
-                    user_id,
-                    provider="linkedin",
-                    status="failed",
-                    error=str(linkedin_meta.get("error") or "LinkedIn fetch failed"),
-                    scan_id=scan_id,
-                )
+        if provider_batch:
+            await emit_provider_batch(user_id, providers=provider_batch, scan_id=scan_id)
 
     latest_resume = await _resolve_resume_for_scan(resume_id)
+    shown_cache = await load_shown_job_cache()
     skipped_already_shown = 0
     quality_rejected = 0
     matched_candidates: list[dict[str, Any]] = []
@@ -448,6 +505,7 @@ async def discover_and_store_jobs(resume_id: str | None = None) -> ScanFetchResp
             job["apply_url"],
             job["title"],
             job["company"],
+            cache=shown_cache,
         ):
             skipped_already_shown += 1
             continue
@@ -466,14 +524,16 @@ async def discover_and_store_jobs(resume_id: str | None = None) -> ScanFetchResp
         )
         matched_candidates.append(rank_job_candidate(job, analysis))
 
-    ranked_candidates, quality_rejected = filter_jobs_by_quality(matched_candidates)
+    ranked_candidates, quality_rejected = score_jobs_with_quality(matched_candidates)
 
     ranked_candidates = sorted(
         ranked_candidates,
         key=lambda item: (
             item["match_percentage"],
+            int(item.get("actionable_in_india", True)),
             item.get("job_quality_score", 0),
             int(item.get("remote_priority", False)),
+            int(item.get("india_focused", False)),
             item.get("title", ""),
         ),
         reverse=True,
@@ -598,6 +658,7 @@ async def fetch_and_merge_linkedin_jobs(
         scan_id = generate_scan_id()
         scan_timestamp = _utc_now_iso()
 
+    shown_cache = await load_shown_job_cache()
     matched_candidates: list[dict[str, Any]] = []
     skipped = 0
     for job in filtered_jobs:
@@ -605,6 +666,7 @@ async def fetch_and_merge_linkedin_jobs(
             job["apply_url"],
             job["title"],
             job["company"],
+            cache=shown_cache,
         ):
             skipped += 1
             continue

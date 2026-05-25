@@ -198,7 +198,7 @@ async def fetch_public_jobs_async() -> PublicJobsFetchResult:
         try:
             return await asyncio.wait_for(
                 LinkedInPlaywrightJobSource().run_fetch(),
-                timeout=120.0,
+                timeout=180.0,
             )
         except asyncio.TimeoutError:
             return TimeoutError("LinkedIn discovery timed out after 120 seconds")

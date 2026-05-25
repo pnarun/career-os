@@ -271,6 +271,8 @@ async def list_applications(
     min_match: int | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
+    page: int | None = None,
+    limit: int | None = None,
 ) -> list[ApplicationDocument]:
     collection = _get_collection()
     query: dict[str, Any] = _scoped_query()
@@ -291,9 +293,25 @@ async def list_applications(
             applied_filter["$lte"] = date_to
         query["applied_at"] = applied_filter
 
-    cursor = collection.find(query).sort("updated_at", -1)
-    documents = await cursor.to_list(length=500)
+    max_limit = 500
+    effective_limit = min(max(1, limit or max_limit), max_limit)
+    skip = 0
+    if page is not None and page > 1:
+        skip = (page - 1) * effective_limit
+    cursor = collection.find(query).sort("updated_at", -1).skip(skip).limit(effective_limit)
+    documents = await cursor.to_list(length=effective_limit)
     return [ApplicationDocument.from_mongo(doc) for doc in documents]
+
+
+async def build_job_application_map() -> dict[str, ApplicationDocument]:
+    """Return applications keyed by job_id for bulk UI lookups."""
+    applications = await list_applications(limit=500)
+    mapping: dict[str, ApplicationDocument] = {}
+    for app in applications:
+        job_key = (app.job_id or "").strip()
+        if job_key and job_key not in mapping:
+            mapping[job_key] = app
+    return mapping
 
 
 async def get_application_by_job_id(job_id: str) -> ApplicationDocument | None:
@@ -308,7 +326,7 @@ async def get_application_by_job_id(job_id: str) -> ApplicationDocument | None:
 
 async def build_application_analytics() -> ApplicationAnalytics:
     collection = _get_collection()
-    documents = await collection.find({}).to_list(length=1000)
+    documents = await collection.find(_scoped_query()).to_list(length=1000)
 
     total_saved = sum(1 for doc in documents if doc.get("status") == "saved")
     total_applied = sum(1 for doc in documents if doc.get("status") == "applied")

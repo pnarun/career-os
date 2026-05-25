@@ -15,31 +15,19 @@ import { LandingPage } from "@/pages/LandingPage"
 const DashboardPage = lazy(() =>
   import("@/pages/DashboardPage").then((m) => ({ default: m.DashboardPage }))
 )
-const InterviewPrep = lazy(() =>
-  import("@/pages/InterviewPrep").then((m) => ({ default: m.InterviewPrep }))
+const ResumeHub = lazy(() =>
+  import("@/pages/ResumeHub").then((m) => ({ default: m.ResumeHub }))
 )
-const JobMatch = lazy(() => import("@/pages/JobMatch").then((m) => ({ default: m.JobMatch })))
-const Jobs = lazy(() => import("@/pages/Jobs").then((m) => ({ default: m.Jobs })))
-const ResumeAI = lazy(() => import("@/pages/ResumeAI").then((m) => ({ default: m.ResumeAI })))
-const ResumeUpload = lazy(() =>
-  import("@/pages/ResumeUpload").then((m) => ({ default: m.ResumeUpload }))
+const JobsHub = lazy(() => import("@/pages/JobsHub").then((m) => ({ default: m.JobsHub })))
+const CareerHub = lazy(() =>
+  import("@/pages/CareerHub").then((m) => ({ default: m.CareerHub }))
 )
-const Applications = lazy(() =>
-  import("@/pages/Applications").then((m) => ({ default: m.Applications }))
+const InsightsHub = lazy(() =>
+  import("@/pages/InsightsHub").then((m) => ({ default: m.InsightsHub }))
 )
-const Automation = lazy(() =>
-  import("@/pages/Automation").then((m) => ({ default: m.Automation }))
+const OperationsHub = lazy(() =>
+  import("@/pages/OperationsHub").then((m) => ({ default: m.OperationsHub }))
 )
-const Notifications = lazy(() =>
-  import("@/pages/Notifications").then((m) => ({ default: m.Notifications }))
-)
-const CareerAnalytics = lazy(() =>
-  import("@/pages/CareerAnalytics").then((m) => ({ default: m.CareerAnalytics }))
-)
-const CareerCopilot = lazy(() =>
-  import("@/pages/CareerCopilot").then((m) => ({ default: m.CareerCopilot }))
-)
-const Scans = lazy(() => import("@/pages/Scans").then((m) => ({ default: m.Scans })))
 const Settings = lazy(() => import("@/pages/Settings").then((m) => ({ default: m.Settings })))
 const Profile = lazy(() => import("@/pages/Profile").then((m) => ({ default: m.Profile })))
 
@@ -51,38 +39,26 @@ function PageFallback() {
   )
 }
 
-function renderPage(page: AppPage, onNavigate: (page: AppPage) => void) {
+function renderPage(page: AppPage) {
   switch (page) {
     case "dashboard":
-      return <DashboardPage onNavigate={onNavigate} />
-    case "resume":
-      return <ResumeUpload />
-    case "resume-ai":
-      return <ResumeAI />
-    case "interview-prep":
-      return <InterviewPrep />
-    case "match":
-      return <JobMatch />
-    case "jobs":
-      return <Jobs />
-    case "applications":
-      return <Applications />
-    case "notifications":
-      return <Notifications />
-    case "automation":
-      return <Automation />
-    case "career-analytics":
-      return <CareerAnalytics />
-    case "career-copilot":
-      return <CareerCopilot />
-    case "scans":
-      return <Scans />
+      return <DashboardPage onNavigate={() => {}} />
+    case "resume-hub":
+      return <ResumeHub />
+    case "jobs-hub":
+      return <JobsHub />
+    case "career-hub":
+      return <CareerHub />
+    case "insights-hub":
+      return <InsightsHub />
+    case "operations-hub":
+      return <OperationsHub />
     case "settings":
       return <Settings />
     case "profile":
       return <Profile />
     default:
-      return <DashboardPage onNavigate={onNavigate} />
+      return <DashboardPage onNavigate={() => {}} />
   }
 }
 
@@ -99,15 +75,21 @@ function AppShell() {
   )
 
   useEffect(() => {
-    if (gateActive && page !== "resume") {
-      setPage("resume")
+    if (gateActive && page !== "resume-hub") {
+      setPage("resume-hub")
     }
   }, [gateActive, page])
 
   return (
     <DashboardLayout activePage={page} onNavigate={handleNavigate} navLocked={gateActive}>
-      <Suspense fallback={<PageFallback />}>{renderPage(page, handleNavigate)}</Suspense>
-      <PlatformTour />
+      <Suspense fallback={<PageFallback />}>
+        {page === "dashboard" ? (
+          <DashboardPage onNavigate={handleNavigate} />
+        ) : (
+          renderPage(page)
+        )}
+      </Suspense>
+      <PlatformTour onNavigate={handleNavigate} />
       <ResumeOnboardingModal onNavigate={handleNavigate} />
       <RealtimeToastHost />
       <PwaInstallPrompt />

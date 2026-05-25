@@ -94,10 +94,32 @@ export function JobResumeOptimizeModal({ job, open, onClose }) {
                     Current ATS: {result.ats_score_before}% → Tailored: {result.ats_score_tailored}%
                   </p>
                   <p className="text-muted-foreground">
-                    Projected with changes: {result.projected_ats_score}%
+                    Realistic ceiling with honest edits: {result.projected_ats_score}%
+                    {result.improvement_potential_percent != null && (
+                      <> (+{result.improvement_potential_percent}% potential)</>
+                    )}
                   </p>
+                  {result.improvement_summary && (
+                    <p className="text-xs text-muted-foreground">{result.improvement_summary}</p>
+                  )}
                 </div>
               </div>
+
+              {result.genuine_missing_skills?.length > 0 && (
+                <div>
+                  <h3 className="mb-2 text-sm font-medium">Gaps in JD (add only if true for you)</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {result.genuine_missing_skills.map((skill) => (
+                      <span
+                        key={skill}
+                        className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-0.5 text-xs text-amber-200"
+                      >
+                        {skill}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {result.optimization_plan?.length > 0 && (
                 <div>

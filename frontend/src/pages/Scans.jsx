@@ -14,7 +14,7 @@ import {
 import { EmailPreviewModal } from "@/components/EmailPreviewModal"
 import { LiveExecutionTimeline } from "@/components/scans/LiveExecutionTimeline"
 import { ScanDetailModal } from "@/components/scans/ScanDetailModal"
-import { useRealtime } from "@/context/RealtimeContext"
+import { useFeedVersion, useRealtimeConnection } from "@/context/RealtimeContext"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
@@ -56,7 +56,8 @@ function StatCell({ label, value, sub }) {
 }
 
 export function Scans() {
-  const { connected, feedVersion } = useRealtime()
+  const { connected } = useRealtimeConnection()
+  const feedVersion = useFeedVersion()
   const [data, setData] = useState(null)
   const [prefs, setPrefs] = useState(null)
   const [preferenceId, setPreferenceId] = useState(null)
@@ -64,10 +65,14 @@ export function Scans() {
   const [schedule, setSchedule] = useState({
     scan_time: "08:00",
     timezone: "Asia/Kolkata",
-    frequency: "daily",
+    frequency: "every_6h",
     is_active: true,
     resume_id: "",
     auto_email_on_scan: true,
+    target_roles: "",
+    years_experience: 0,
+    preferred_locations: "",
+    use_default_six_hour_schedule: true,
   })
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(null)
@@ -97,10 +102,14 @@ export function Scans() {
         setSchedule({
           scan_time: preferences.scan_time ?? "08:00",
           timezone: preferences.timezone ?? "Asia/Kolkata",
-          frequency: preferences.frequency ?? "daily",
+          frequency: preferences.frequency ?? "every_6h",
           is_active: preferences.is_active ?? true,
           resume_id: preferences.resume_id ?? "",
           auto_email_on_scan: preferences.auto_email_on_scan ?? true,
+          target_roles: (preferences.target_roles || []).join(", "),
+          years_experience: preferences.years_experience ?? 0,
+          preferred_locations: (preferences.preferred_locations || []).join(", "),
+          use_default_six_hour_schedule: preferences.use_default_six_hour_schedule ?? true,
         })
       }
     } catch (err) {
@@ -209,6 +218,16 @@ export function Scans() {
         is_active: schedule.is_active,
         resume_id: schedule.resume_id,
         auto_email_on_scan: schedule.auto_email_on_scan,
+        target_roles: schedule.target_roles
+          .split(",")
+          .map((r) => r.trim())
+          .filter(Boolean),
+        years_experience: Number(schedule.years_experience) || 0,
+        preferred_locations: schedule.preferred_locations
+          .split(",")
+          .map((l) => l.trim())
+          .filter(Boolean),
+        use_default_six_hour_schedule: schedule.use_default_six_hour_schedule,
       })
       setMessage("Scheduled automation updated.")
       await load()
@@ -325,17 +344,20 @@ export function Scans() {
                   onChange={(e) => setSchedule((s) => ({ ...s, frequency: e.target.value }))}
                   className="mt-1 flex h-9 w-full rounded-lg border border-input bg-background px-2 text-sm"
                 >
-                  <option value="daily">Daily</option>
-                  <option value="weekly">Weekly</option>
+                  <option value="every_6h">Every 6 hours (00, 06, 12, 18)</option>
+                  <option value="daily">Daily (custom time)</option>
+                  <option value="weekly">Weekly (custom time)</option>
+                  <option value="custom">Custom time only</option>
                 </select>
               </div>
               <div>
-                <label className="text-xs text-muted-foreground">Scan time</label>
+                <label className="text-xs text-muted-foreground">Scan time (custom schedules)</label>
                 <input
                   type="time"
                   value={schedule.scan_time}
+                  disabled={schedule.frequency === "every_6h"}
                   onChange={(e) => setSchedule((s) => ({ ...s, scan_time: e.target.value }))}
-                  className="mt-1 flex h-9 w-full rounded-lg border border-input bg-background px-2 text-sm"
+                  className="mt-1 flex h-9 w-full rounded-lg border border-input bg-background px-2 text-sm disabled:opacity-50"
                 />
               </div>
               <div>
@@ -368,6 +390,37 @@ export function Scans() {
                 </select>
               </div>
             </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Target roles (comma-separated)</label>
+              <input
+                value={schedule.target_roles}
+                onChange={(e) => setSchedule((s) => ({ ...s, target_roles: e.target.value }))}
+                placeholder="Backend Developer, DevOps Engineer"
+                className="mt-1 flex h-9 w-full rounded-lg border border-input bg-background px-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Years of experience</label>
+              <input
+                type="number"
+                min={0}
+                max={50}
+                value={schedule.years_experience}
+                onChange={(e) =>
+                  setSchedule((s) => ({ ...s, years_experience: Number(e.target.value) }))
+                }
+                className="mt-1 flex h-9 w-full rounded-lg border border-input bg-background px-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Preferred locations</label>
+              <input
+                value={schedule.preferred_locations}
+                onChange={(e) => setSchedule((s) => ({ ...s, preferred_locations: e.target.value }))}
+                placeholder="Remote, Bangalore, India"
+                className="mt-1 flex h-9 w-full rounded-lg border border-input bg-background px-2 text-sm"
+              />
+            </div>
             <label className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
@@ -376,6 +429,10 @@ export function Scans() {
               />
               Auto-send email after scan
             </label>
+            <p className="text-xs text-muted-foreground">
+              Default schedule runs at 00:00, 06:00, 12:00, and 18:00 in your timezone. Scan
+              criteria are filled from your resume when you upload; edit them here anytime.
+            </p>
             <Button size="sm" onClick={onSaveSchedule} disabled={busy === "schedule" || !preferenceId}>
               Save schedule
             </Button>

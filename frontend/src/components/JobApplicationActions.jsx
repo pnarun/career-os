@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react"
+
+import { useApplicationsMapOptional } from "@/context/ApplicationsMapContext"
 import { Bookmark, Bot, CheckCircle2, Loader2, Mic, Sparkles } from "lucide-react"
 
 import { ApplyAssistantModal } from "@/components/ApplyAssistantModal"
@@ -23,7 +25,10 @@ import { getStatusLabel } from "@/utils/applicationStatusUtils"
  * }} props
  */
 export function JobApplicationActions({ job, compact = false, onUpdated }) {
-  const [application, setApplication] = useState(null)
+  const applicationsMap = useApplicationsMapOptional()
+  const jobKey = String(job.id || job.job_id || "")
+  const mappedApplication = applicationsMap?.applicationByJobId?.[jobKey] ?? null
+  const [application, setApplication] = useState(mappedApplication)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
   const [applyModalOpen, setApplyModalOpen] = useState(false)
@@ -33,8 +38,13 @@ export function JobApplicationActions({ job, compact = false, onUpdated }) {
   const canAssistedApply = ASSISTED_APPLY_ENABLED && isLinkedInEasyApply(job)
 
   useEffect(() => {
+    if (applicationsMap) {
+      setApplication(mappedApplication)
+      onUpdated?.(mappedApplication)
+      return undefined
+    }
     let cancelled = false
-    getApplications({ jobId: String(job.id || job.job_id || "") })
+    getApplications({ jobId: jobKey })
       .then((apps) => {
         if (!cancelled) {
           const next = apps[0] ?? null
@@ -51,7 +61,7 @@ export function JobApplicationActions({ job, compact = false, onUpdated }) {
     return () => {
       cancelled = true
     }
-  }, [job.id, job.job_id, onUpdated])
+  }, [applicationsMap, jobKey, mappedApplication, onUpdated])
 
   const onSave = async () => {
     setBusy(true)
@@ -59,6 +69,7 @@ export function JobApplicationActions({ job, compact = false, onUpdated }) {
     try {
       const saved = await saveJobApplication(job)
       setApplication(saved)
+      applicationsMap?.setApplicationForJob?.(jobKey, saved)
       onUpdated?.(saved)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save job")
@@ -73,6 +84,7 @@ export function JobApplicationActions({ job, compact = false, onUpdated }) {
     try {
       const applied = await markJobApplied(job)
       setApplication(applied)
+      applicationsMap?.setApplicationForJob?.(jobKey, applied)
       onUpdated?.(applied)
       if (job.apply_url) {
         window.open(String(job.apply_url), "_blank", "noopener,noreferrer")
@@ -91,6 +103,7 @@ export function JobApplicationActions({ job, compact = false, onUpdated }) {
     try {
       const updated = await updateApplicationStatus(application.application_id, status)
       setApplication(updated)
+      applicationsMap?.setApplicationForJob?.(jobKey, updated)
       onUpdated?.(updated)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update status")

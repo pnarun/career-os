@@ -309,26 +309,34 @@ def log_quality_rejected_job(
     )
 
 
-def filter_jobs_by_quality(jobs: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
-    """Evaluate quality, reject suspicious/low-score jobs, return (accepted, rejected_count)."""
+def score_jobs_with_quality(jobs: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
+    """
+    Score every job for sorting; drop only obvious spam/suspicious listings.
+    Low quality scores are kept — match % drives ordering in the jobs feed.
+    """
     accepted: list[dict[str, Any]] = []
     rejected = 0
 
     for job in jobs:
         enriched = apply_quality_to_job(job)
         reason = get_quality_rejection_reason(enriched)
-        if reason is None:
-            accepted.append(enriched)
-        else:
+        if reason == "suspicious":
             log_quality_rejected_job(job, enriched, reason)
             rejected += 1
+            continue
+        accepted.append(enriched)
 
     logger.info(
-        "Job quality gate: accepted=%d rejected=%d",
+        "Job quality scoring: kept=%d rejected_spam=%d",
         len(accepted),
         rejected,
     )
     return accepted, rejected
+
+
+def filter_jobs_by_quality(jobs: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
+    """Backward-compatible alias — score all, reject spam only."""
+    return score_jobs_with_quality(jobs)
 
 
 def get_recent_quality_rejection_logs(limit: int = 100) -> list[dict[str, Any]]:

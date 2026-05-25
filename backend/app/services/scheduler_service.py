@@ -85,14 +85,22 @@ def register_preference_job(preferences: UserPreferencesDocument) -> None:
         unregister_preference_job(preferences.id)
         return
 
-    hour, minute = _parse_scan_time(preferences.scan_time)
     tz = _resolve_timezone(preferences.timezone)
+    frequency = (preferences.frequency or "every_6h").strip().lower()
 
-    trigger = CronTrigger(
-        hour=hour,
-        minute=minute,
-        timezone=tz,
-    )
+    if frequency == "every_6h" or getattr(preferences, "use_default_six_hour_schedule", True):
+        trigger = CronTrigger(
+            hour="0,6,12,18",
+            minute=0,
+            timezone=tz,
+        )
+    else:
+        hour, minute = _parse_scan_time(preferences.scan_time)
+        trigger = CronTrigger(
+            hour=hour,
+            minute=minute,
+            timezone=tz,
+        )
 
     scheduler.add_job(
         _execute_scheduled_scan,

@@ -1,5 +1,12 @@
 const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8001"
+  import.meta.env.VITE_API_BASE_URL ??
+  (import.meta.env.PROD ? "" : "http://127.0.0.1:8001")
+
+if (import.meta.env.PROD && !API_BASE_URL) {
+  console.error(
+    "[Career OS] VITE_API_BASE_URL is not set. Add it in Vercel → Environment Variables and redeploy."
+  )
+}
 
 const ACCESS_KEY = "career_os_access_token"
 const REFRESH_KEY = "career_os_refresh_token"

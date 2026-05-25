@@ -63,6 +63,22 @@ def _filter_jobs_for_preferences(
     return filtered
 
 
+def _jobs_eligible_for_alerts(
+    jobs: list[JobDocument],
+    preferences: UserPreferencesDocument,
+) -> list[JobDocument]:
+    """
+    Email/high-match alerts: India or remote roles only — skip foreign onsite listings.
+    """
+    filtered = _filter_jobs_for_preferences(jobs, preferences)
+    return [
+        j for j in filtered
+        if getattr(j, "actionable_in_india", True)
+        or j.remote_priority
+        or j.india_focused
+    ]
+
+
 def _extract_provider_stats(scan_summary) -> tuple[list[str], list[str], dict[str, int]]:
     succeeded: list[str] = []
     failed: list[str] = []
@@ -92,7 +108,10 @@ async def run_daily_job_scan_automation(preference_id: str) -> None:
         scan_result = await run_scan_for_user(preferences)
         all_jobs = scan_result.top_jobs or []
         qualified = _filter_jobs_for_preferences(all_jobs, preferences)
-        high_matches = [j for j in qualified if j.match_percentage >= HIGH_MATCH_THRESHOLD]
+        alert_jobs = _jobs_eligible_for_alerts(all_jobs, preferences)
+        high_matches = [
+            j for j in alert_jobs if j.match_percentage >= HIGH_MATCH_THRESHOLD
+        ]
 
         succeeded, failed, provider_stats = _extract_provider_stats(scan_result)
 
@@ -297,8 +316,12 @@ async def run_manual_automation_scan(preferences: UserPreferencesDocument):
     run_id = await start_automation_run("daily_scan", preferences.id)
     try:
         scan_result = await run_scan_now(preferences)
-        qualified = _filter_jobs_for_preferences(scan_result.top_jobs or [], preferences)
-        high_matches = [j for j in qualified if j.match_percentage >= HIGH_MATCH_THRESHOLD]
+        all_jobs = scan_result.top_jobs or []
+        qualified = _filter_jobs_for_preferences(all_jobs, preferences)
+        alert_jobs = _jobs_eligible_for_alerts(all_jobs, preferences)
+        high_matches = [
+            j for j in alert_jobs if j.match_percentage >= HIGH_MATCH_THRESHOLD
+        ]
 
         alert_count = await notify_high_match_jobs(preferences, high_matches)
         await notify_scan_complete(

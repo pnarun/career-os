@@ -1,6 +1,6 @@
 import { CheckCircle2, Circle, Loader2, XCircle } from "lucide-react"
 
-import { useRealtime } from "@/context/RealtimeContext"
+import { useRealtimeConnection, useRealtimeTimeline } from "@/context/RealtimeContext"
 import { cn } from "@/lib/utils"
 
 const EVENT_ICON = {
@@ -22,7 +22,8 @@ function iconFor(event) {
 }
 
 export function LiveExecutionTimeline({ className }) {
-  const { timeline, connected, clearTimeline } = useRealtime()
+  const { timeline, clearTimeline } = useRealtimeTimeline()
+  const { connected } = useRealtimeConnection()
 
   if (!timeline.length) {
     return (

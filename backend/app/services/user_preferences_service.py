@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 PREFERENCES_COLLECTION = "user_preferences"
 SCAN_TIME_PATTERN = re.compile(r"^([01]?\d|2[0-3]):([0-5]\d)$")
-ALLOWED_FREQUENCIES = frozenset({"daily", "weekly"})
+ALLOWED_FREQUENCIES = frozenset({"daily", "weekly", "every_6h", "custom"})
 ALLOWED_DIGEST_FREQUENCIES = frozenset({"daily", "weekly"})
 HIGH_MATCH_THRESHOLD = 85
 
@@ -36,6 +36,10 @@ def _extended_preference_fields(payload) -> dict[str, Any]:
         "interview_reminders",
         "scan_completion_alerts",
         "auto_email_on_scan",
+        "target_roles",
+        "years_experience",
+        "use_default_six_hour_schedule",
+        "preferred_locations",
     ):
         value = getattr(payload, name, None)
         if value is not None:
@@ -300,6 +304,34 @@ async def get_active_preferences() -> list[UserPreferencesDocument]:
     except Exception as exc:
         logger.exception("Failed to list active preferences")
         raise UserPreferencesServiceError("Failed to list active preferences") from exc
+
+
+async def apply_scan_profile_from_resume(resume) -> None:
+    """Sync scan targeting fields from uploaded resume into user preferences."""
+    from app.models.resume import ResumeDocument
+    from app.services.resume_scan_profile_service import extract_scan_profile_from_resume
+
+    if not isinstance(resume, ResumeDocument):
+        return
+
+    profile = extract_scan_profile_from_resume(resume)
+    prefs = await get_preferences()
+    if not prefs:
+        return
+
+    update = UserPreferencesUpdate(
+        resume_id=resume.id,
+        target_roles=profile.get("target_roles") or [],
+        years_experience=int(profile.get("years_experience") or 0),
+        preferred_locations=profile.get("preferred_locations") or [],
+    )
+    updated = await update_preferences(prefs.id, update)
+    try:
+        from app.services.scheduler_service import register_preference_job
+
+        register_preference_job(updated)
+    except Exception as exc:
+        logger.warning("Could not re-register scheduler after resume sync: %s", exc)
 
 
 async def mark_email_sent(preference_id: str, scan_id: str) -> None:

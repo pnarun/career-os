@@ -8,7 +8,6 @@ import {
   Radar,
   Send,
   Settings,
-  Target,
   X,
 } from "lucide-react"
 
@@ -20,6 +19,14 @@ import {
   permanentlyDismissTour,
   shouldShowPlatformTour,
 } from "@/lib/platformTour"
+import { cn } from "@/lib/utils"
+
+const MOBILE_MAX_WIDTH = 1023
+
+function isMobileLayout() {
+  if (typeof window === "undefined") return false
+  return window.matchMedia(`(max-width: ${MOBILE_MAX_WIDTH}px)`).matches
+}
 
 const STEPS = [
   {
@@ -29,7 +36,7 @@ const STEPS = [
     description:
       "Your AI-powered career operating system — discover jobs, prepare for interviews, track applications, and automate your job search from one place.",
     navTarget: null,
-    location: "Use the sidebar (or bottom nav on mobile) to move between features.",
+    location: "Use the sidebar (desktop) or bottom navigation (mobile) to move between features.",
   },
   {
     id: "dashboard",
@@ -41,83 +48,88 @@ const STEPS = [
     location: "Sidebar → Dashboard",
   },
   {
-    id: "resume",
+    id: "resume-hub",
     icon: Briefcase,
-    title: "Resume & Resume AI",
+    title: "Resume",
     description:
-      "Upload and parse your resume, then use Resume AI for ATS scoring, keyword optimization, and tailored versions for specific roles.",
-    navTarget: "resume",
-    location: "Sidebar → Resume · Resume AI",
+      "Upload and parse your resume, then switch to the Resume AI tab for ATS scoring, keyword optimization, and tailored versions.",
+    navTarget: "resume-hub",
+    location: "Sidebar → Resume (Upload · Resume AI tabs)",
   },
   {
-    id: "jobs",
-    icon: Target,
-    title: "Jobs & Job Match",
+    id: "jobs-hub",
+    icon: Briefcase,
+    title: "Jobs",
     description:
-      "Browse your curated job feed from LinkedIn, Indeed, Naukri, and more. Use Job Match to score any role against your resume.",
-    navTarget: "jobs",
-    location: "Sidebar → Jobs · Job Match",
+      "Browse your curated job feed from multiple providers. Use the Job Match tab to score any role against your resume.",
+    navTarget: "jobs-hub",
+    location: "Sidebar → Jobs (Feed · Match tabs)",
   },
   {
-    id: "applications",
+    id: "career-hub",
     icon: Send,
-    title: "Applications & Interview Prep",
+    title: "Career Track",
     description:
-      "Track saved jobs, applications, interviews, and rejections. Interview Prep gives readiness scores and mock interview practice.",
-    navTarget: "applications",
-    location: "Sidebar → Applications · Interview Prep",
+      "Track saved jobs, applications, and interview stages. Interview Prep provides readiness scores and mock practice.",
+    navTarget: "career-hub",
+    location: "Sidebar → Career Track (Applications · Interview Prep)",
   },
   {
-    id: "intelligence",
+    id: "insights-hub",
     icon: BarChart3,
-    title: "Career Analytics & Copilot",
+    title: "Career Intelligence",
     description:
-      "Market intelligence, salary insights, and growth analytics. Career Copilot is your AI assistant grounded in your jobs and resume data.",
-    navTarget: "career-analytics",
-    location: "Sidebar → Career Analytics · Career Copilot",
+      "Market intelligence, salary insights, and growth analytics. Career Copilot is your AI assistant grounded in your data.",
+    navTarget: "insights-hub",
+    location: "Sidebar → Intelligence (Analytics · Copilot)",
   },
   {
-    id: "automation",
+    id: "operations-hub",
     icon: Radar,
-    title: "Scans, Automation & Alerts",
+    title: "Scans & Automation",
     description:
-      "Run job scans, schedule automation, watch live execution, manage browser sessions, and get real-time notifications for high-match roles.",
-    navTarget: "scans",
-    location: "Sidebar → Scans · Automation · Notifications",
+      "Run scans on a schedule, watch live execution, manage browser login sessions, and receive high-match alerts.",
+    navTarget: "operations-hub",
+    location: "Sidebar → Scans & Automation (Scans · Automation · Notifications)",
   },
   {
     id: "settings",
     icon: Settings,
     title: "Settings & Profile",
     description:
-      "Configure job preferences, AI strictness, provider priority, and scan scheduling in Settings. Manage your account from the profile menu (top right).",
+      "Configure job preferences, AI strictness, provider priority, and scan scheduling. Manage your account from the profile menu.",
     navTarget: "settings",
-    location: "Sidebar → Settings · Top-right menu → Profile",
+    profileTarget: "profile-menu",
+    location: "Sidebar → Settings · Top-right avatar → Profile",
   },
 ]
 
-function TourSpotlight({ targetId }) {
+function TourSpotlight({ targetId, secondaryTargetId }) {
   const [rect, setRect] = useState(null)
+  const [secondaryRect, setSecondaryRect] = useState(null)
 
   useEffect(() => {
-    if (!targetId) {
+    if (!targetId && !secondaryTargetId) {
       setRect(null)
+      setSecondaryRect(null)
       return undefined
     }
 
     const update = () => {
-      const el = document.querySelector(`[data-tour-id="${targetId}"]`)
-      if (!el) {
-        setRect(null)
-        return
+      const measure = (id) => {
+        if (!id) return null
+        const el = document.querySelector(`[data-tour-id="${id}"]`)
+        if (!el) return null
+        const box = el.getBoundingClientRect()
+        return {
+          top: box.top - 6,
+          left: box.left - 6,
+          width: box.width + 12,
+          height: box.height + 12,
+        }
       }
-      const box = el.getBoundingClientRect()
-      setRect({
-        top: box.top - 6,
-        left: box.left - 6,
-        width: box.width + 12,
-        height: box.height + 12,
-      })
+      setRect(measure(targetId))
+      setSecondaryRect(measure(secondaryTargetId))
     }
 
     update()
@@ -130,21 +142,20 @@ function TourSpotlight({ targetId }) {
       window.removeEventListener("scroll", update, true)
       window.clearInterval(timer)
     }
-  }, [targetId])
+  }, [targetId, secondaryTargetId])
 
   useEffect(() => {
-    if (!targetId) return undefined
-
-    const el = document.querySelector(`[data-tour-id="${targetId}"]`)
-    if (!el) return undefined
-
-    el.classList.add("platform-tour-spotlight-target")
+    const ids = [targetId, secondaryTargetId].filter(Boolean)
+    const elements = ids
+      .map((id) => document.querySelector(`[data-tour-id="${id}"]`))
+      .filter(Boolean)
+    elements.forEach((el) => el.classList.add("platform-tour-spotlight-target"))
     return () => {
-      el.classList.remove("platform-tour-spotlight-target")
+      elements.forEach((el) => el.classList.remove("platform-tour-spotlight-target"))
     }
-  }, [targetId, rect])
+  }, [targetId, secondaryTargetId, rect, secondaryRect])
 
-  if (!targetId) {
+  if (!targetId && !secondaryTargetId) {
     return (
       <div
         className="fixed inset-0 z-[190] bg-black/70 backdrop-blur-[2px]"
@@ -153,25 +164,31 @@ function TourSpotlight({ targetId }) {
     )
   }
 
-  if (!rect) return null
+  const SpotlightBox = ({ box }) =>
+    box ? (
+      <div
+        className="pointer-events-none fixed z-[200] rounded-lg ring-2 ring-indigo-400 ring-offset-2 ring-offset-background transition-all duration-300"
+        style={{
+          top: box.top,
+          left: box.left,
+          width: box.width,
+          height: box.height,
+          boxShadow:
+            "0 0 0 9999px oklch(0.08 0.02 270 / 0.72), 0 0 28px oklch(0.55 0.22 275 / 0.65)",
+        }}
+        aria-hidden
+      />
+    ) : null
 
   return (
-    <div
-      className="pointer-events-none fixed z-[200] rounded-lg ring-2 ring-indigo-400 ring-offset-2 ring-offset-background transition-all duration-300"
-      style={{
-        top: rect.top,
-        left: rect.left,
-        width: rect.width,
-        height: rect.height,
-        boxShadow:
-          "0 0 0 9999px oklch(0.08 0.02 270 / 0.72), 0 0 28px oklch(0.55 0.22 275 / 0.65)",
-      }}
-      aria-hidden
-    />
+    <>
+      <SpotlightBox box={rect} />
+      <SpotlightBox box={secondaryRect} />
+    </>
   )
 }
 
-export function PlatformTour() {
+export function PlatformTour({ onNavigate }) {
   const { user } = useAuth()
   const { notifyTourClosed } = useResumeOnboarding()
   const [open, setOpen] = useState(false)
@@ -179,12 +196,18 @@ export function PlatformTour() {
   const [dontShowAgain, setDontShowAgain] = useState(false)
 
   useEffect(() => {
-    if (user?.id && shouldShowPlatformTour(user.id)) {
-      setOpen(true)
-      setStepIndex(0)
-      setDontShowAgain(false)
+    if (!user?.id || !shouldShowPlatformTour(user.id)) return
+
+    if (isMobileLayout()) {
+      markTourClosedThisSession()
+      notifyTourClosed()
+      return
     }
-  }, [user?.id])
+
+    setOpen(true)
+    setStepIndex(0)
+    setDontShowAgain(false)
+  }, [user?.id, notifyTourClosed])
 
   const closeTour = useCallback(
     (permanent) => {
@@ -209,15 +232,23 @@ export function PlatformTour() {
 
   return (
     <>
-      <TourSpotlight targetId={step.navTarget} />
+      <TourSpotlight
+        targetId={step.navTarget}
+        secondaryTargetId={step.profileTarget}
+      />
 
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="platform-tour-title"
-        className="fixed inset-0 z-[210] flex items-end justify-center p-4 sm:items-center"
+        className="fixed inset-0 z-[210] flex items-end justify-center p-3 sm:items-center sm:p-4"
       >
-        <div className="neon-glass w-full max-w-lg rounded-2xl p-6 shadow-2xl">
+        <div
+          className={cn(
+            "neon-glass w-full rounded-2xl p-5 shadow-2xl sm:p-6",
+            "max-w-[min(100%,28rem)] sm:max-w-lg"
+          )}
+        >
           <div className="mb-4 flex items-start justify-between gap-3">
             <div className="flex items-center gap-3">
               <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-md shadow-indigo-500/30">
@@ -292,7 +323,13 @@ export function PlatformTour() {
                   type="button"
                   size="sm"
                   className="gap-1"
-                  onClick={() => setStepIndex((i) => i + 1)}
+                  onClick={() => {
+                    const next = STEPS[stepIndex + 1]
+                    if (next?.navTarget && onNavigate) {
+                      onNavigate(next.navTarget)
+                    }
+                    setStepIndex((i) => i + 1)
+                  }}
                 >
                   Next
                   <ChevronRight className="size-4" />

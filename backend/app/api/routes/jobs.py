@@ -62,11 +62,20 @@ async def fetch_jobs() -> ScanFetchResponse:
         ) from exc
 
 
-@router.get("/jobs/history", response_model=list[JobHistoryItem])
-async def list_job_history() -> list[JobHistoryItem]:
-    """Return up to 500 historical jobs for debug (all scans, newest first)."""
+@router.get("/jobs/history")
+async def list_job_history(
+    page: int = 1,
+    limit: int = 50,
+) -> dict:
+    """Return paginated job history (all scans, newest first)."""
     try:
-        return await get_job_history()
+        items, total = await get_job_history(page=page, limit=limit)
+        return {
+            "items": items,
+            "total": total,
+            "page": max(1, page),
+            "limit": min(max(1, limit), 500),
+        }
     except JobServiceError as exc:
         logger.error("Failed to list job history: %s", exc)
         raise HTTPException(
