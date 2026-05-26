@@ -130,7 +130,10 @@ Test login from the Vercel URL; check browser DevTools → Network for CORS erro
 | Issue | Fix |
 |-------|-----|
 | CORS error on login | Redeploy latest API (auto-allows `*.vercel.app` on Render); set `FRONTEND_URL=https://your-app.vercel.app` |
-| 404 on API root `/` | Use `/health`, `/docs`, or `/logs` |
+| 404 on `/logs` | Render is on an old deploy — **Manual Deploy** latest `main` commit |
+| 404 on API root `/` | Use `/health`, `/docs`, or `/logs` (after redeploy) |
+
+After deploy, confirm `/health` includes `"logs_viewer": "/logs"`. If that field is missing, the new build is not live yet.
 | `Failed to fetch` | Wrong `VITE_API_BASE_URL`; Render service asleep |
 | WebSocket fails | Use `wss://` not `ws://`; same host as API |
 | Build fails on Render | Check Docker logs; Playwright install needs enough memory |

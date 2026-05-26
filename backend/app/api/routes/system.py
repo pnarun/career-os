@@ -81,6 +81,21 @@ async def logs_api(
     }
 
 
+@router.get("/system/logs", response_class=HTMLResponse, include_in_schema=True)
+async def logs_viewer_alias(
+    limit: int = Query(default=200, ge=10, le=500),
+) -> HTMLResponse:
+    """Alias for /logs (visible in OpenAPI)."""
+    return await logs_viewer(limit=limit)
+
+
+@router.get("/system/logs/api", include_in_schema=True)
+async def logs_api_alias(
+    limit: int = Query(default=200, ge=10, le=500),
+) -> dict[str, Any]:
+    return await logs_api(limit=limit)
+
+
 async def _mongo_health() -> dict[str, Any]:
     try:
         db = get_database()
@@ -118,6 +133,8 @@ async def health() -> dict[str, Any]:
         "service": settings.APP_NAME,
         "version": settings.APP_VERSION,
         "environment": settings.ENVIRONMENT,
+        "logs_viewer": "/logs",
+        "logs_api": "/logs/api",
     }
 
 
