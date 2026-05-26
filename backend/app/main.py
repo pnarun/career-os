@@ -101,8 +101,8 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
-    docs_url="/docs" if not settings.is_production else None,
-    redoc_url="/redoc" if not settings.is_production else None,
+    docs_url="/docs" if (not settings.is_production or settings.is_cloud_deploy) else None,
+    redoc_url="/redoc" if (not settings.is_production or settings.is_cloud_deploy) else None,
     lifespan=lifespan,
 )
 
@@ -111,12 +111,20 @@ app.add_middleware(RateLimitMiddleware)
 _cors_kwargs: dict = {
     "allow_origins": settings.effective_cors_origins,
     "allow_credentials": settings.CORS_ALLOW_CREDENTIALS,
-    "allow_methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    "allow_headers": ["Authorization", "Content-Type", "X-Requested-With"],
+    "allow_methods": ["*"],
+    "allow_headers": ["*"],
+    "expose_headers": ["*"],
 }
 if settings.effective_cors_origin_regex:
     _cors_kwargs["allow_origin_regex"] = settings.effective_cors_origin_regex
 app.add_middleware(CORSMiddleware, **_cors_kwargs)
+
+logger.info(
+    "CORS enabled origins=%s regex=%s cloud=%s",
+    settings.effective_cors_origins,
+    settings.effective_cors_origin_regex,
+    settings.is_cloud_deploy,
+)
 
 _auth = [Depends(get_current_user)]
 

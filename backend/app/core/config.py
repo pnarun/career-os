@@ -93,13 +93,25 @@ class Settings(BaseSettings):
         return self.ENVIRONMENT == "production"
 
     @property
+    def is_cloud_deploy(self) -> bool:
+        """True on Render/Heroku-style hosts (auto CORS for Vercel frontends)."""
+        return bool(os.getenv("RENDER")) or bool(os.getenv("RENDER_SERVICE_ID"))
+
+    @property
     def effective_cors_origins(self) -> list[str]:
         """Merge configured origins with FRONTEND_URL and local dev hosts."""
         origins = list(self.CORS_ORIGINS)
         frontend = (self.FRONTEND_URL or "").strip().rstrip("/")
         if frontend and frontend not in origins:
             origins.append(frontend)
-        if self.ENVIRONMENT != "production":
+        # Known production frontend (demo) — also covered by vercel regex when deployed
+        for origin in (
+            "https://career-os-two-chi.vercel.app",
+            "https://career-os.vercel.app",
+        ):
+            if origin not in origins:
+                origins.append(origin)
+        if not self.is_production and not self.is_cloud_deploy:
             for host in ("localhost", "127.0.0.1"):
                 for port in (5173, 4173, 3000):
                     origin = f"http://{host}:{port}"
@@ -110,7 +122,11 @@ class Settings(BaseSettings):
     @property
     def effective_cors_origin_regex(self) -> str | None:
         regex = (self.CORS_ORIGIN_REGEX or "").strip()
-        return regex or None
+        if regex:
+            return regex
+        if self.is_production or self.is_cloud_deploy:
+            return r"https://.*\.vercel\.app"
+        return None
 
 
 @lru_cache

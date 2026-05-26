@@ -37,14 +37,37 @@ class StructuredFormatter(logging.Formatter):
         return json.dumps(payload, default=str)
 
 
+class RingBufferHandler(logging.Handler):
+    """Keep recent log lines in memory for /logs viewer (demo & ops)."""
+
+    def __init__(self, buffer, level: int = logging.NOTSET) -> None:
+        super().__init__(level)
+        self._buffer = buffer
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            msg = self.format(record)
+            self._buffer.append(msg)
+        except Exception:
+            self.handleError(record)
+
+
 def configure_logging(*, service: str = "career-os-api", level: str = "INFO") -> None:
+    from app.core.log_buffer import log_buffer
+
     root = logging.getLogger()
     root.handlers.clear()
     root.setLevel(getattr(logging, level.upper(), logging.INFO))
 
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(StructuredFormatter(service=service))
-    root.addHandler(handler)
+    formatter = StructuredFormatter(service=service)
+
+    stdout_handler = logging.StreamHandler(sys.stdout)
+    stdout_handler.setFormatter(formatter)
+    root.addHandler(stdout_handler)
+
+    ring_handler = RingBufferHandler(log_buffer)
+    ring_handler.setFormatter(formatter)
+    root.addHandler(ring_handler)
 
     for name in ("urllib3", "httpx", "httpcore", "apscheduler", "motor"):
         logging.getLogger(name).setLevel(logging.WARNING)
