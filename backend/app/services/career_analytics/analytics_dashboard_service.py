@@ -19,11 +19,22 @@ from app.services.career_analytics.salary_insight_service import build_salary_in
 from app.services.career_analytics.skill_demand_service import build_skill_demand_analytics
 
 
-async def build_analytics_dashboard() -> dict[str, Any]:
-    """Full career intelligence dashboard payload."""
-    salary = await build_salary_insights()
+def _filter_jobs_by_role(jobs: list, target_role: str | None) -> list:
+    if not target_role or not target_role.strip():
+        return jobs
+    needle = target_role.strip().lower()
+    return [
+        j for j in jobs
+        if needle in (getattr(j, "title", "") or "").lower()
+        or needle in (getattr(j, "description", "") or "").lower()
+    ]
+
+
+async def build_analytics_dashboard(target_role: str | None = None) -> dict[str, Any]:
+    """Full career intelligence dashboard payload, optionally scoped to a target role."""
+    salary = await build_salary_insights(target_role=target_role)
     market_trends = await build_market_trends()
-    skill_demand = await build_skill_demand_analytics()
+    skill_demand = await build_skill_demand_analytics(target_role=target_role)
     conversion = await build_application_conversion_analytics()
     providers = await build_provider_performance()
     growth = await build_career_growth_insights()

@@ -9,6 +9,7 @@ import {
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { SlowLoadingFormHint } from "@/components/SlowLoadingStatus"
 import { cn } from "@/lib/utils"
 import {
   APPLY_STATES,
@@ -146,7 +147,9 @@ export function ApplyAssistantModal({ job, open, onClose, onComplete }) {
           </div>
 
           {!session && (
-            <Button onClick={onStart} disabled={starting} className="w-full">
+            <>
+              <SlowLoadingFormHint active={starting} messageKey="assisted-apply" />
+              <Button onClick={onStart} disabled={starting} className="w-full">
               {starting ? (
                 <>
                   <Loader2 className="mr-2 size-4 animate-spin" />
@@ -156,6 +159,7 @@ export function ApplyAssistantModal({ job, open, onClose, onComplete }) {
                 "Start Assisted Apply"
               )}
             </Button>
+            </>
           )}
 
           {session && (

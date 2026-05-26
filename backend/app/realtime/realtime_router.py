@@ -3,6 +3,7 @@ import logging
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
 from app.auth.jwt_service import verify_access_token
+from app.core.user_context import clear_request_user, set_request_user
 from app.realtime.websocket_manager import realtime_manager
 from app.services.user_service import UserNotFoundError, get_user_by_id
 
@@ -31,7 +32,9 @@ async def realtime_websocket(
         await websocket.close(code=4401, reason="Invalid token")
         return
 
-    await realtime_manager.connect(websocket, user_id)
+    set_request_user(user.id, user.workspace_id, user.email)
+
+    await realtime_manager.connect(websocket, user.id)
     try:
         await websocket.send_json(
             {
@@ -49,4 +52,5 @@ async def realtime_websocket(
     except Exception:
         logger.exception("[REALTIME] websocket error user=%s", user_id)
     finally:
-        await realtime_manager.disconnect(websocket, user_id)
+        await realtime_manager.disconnect(websocket, user.id)
+        clear_request_user()

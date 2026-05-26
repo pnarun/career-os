@@ -294,6 +294,7 @@ def build_opportunities_email(
     recipient_email: str = "",
 ) -> EmailBuildResult:
     top_jobs = jobs[:EMAIL_JOB_LIMIT]
+    extra_count = max(0, len(jobs) - len(top_jobs))
     scan_label = scan_summary.scan_timestamp or "Latest scan"
     scan_id = scan_summary.scan_id
 
@@ -307,10 +308,18 @@ def build_opportunities_email(
             f"   Apply: {job.apply_url or 'N/A'}\n"
         )
 
+    overflow_line = ""
+    if extra_count > 0:
+        overflow_line = (
+            f"\n\n{extra_count} more job{'s' if extra_count != 1 else ''} "
+            "are waiting for you on Career OS — open the Jobs feed to review them all."
+        )
+
     text_body = (
         f"{SUBJECT_OPPORTUNITIES}\n\n"
         f"Scan: {scan_label}\nScan ID: {scan_id or 'n/a'}\n\n"
         + "\n".join(text_lines)
+        + overflow_line
         + "\n— Career OS"
     )
 
@@ -329,6 +338,7 @@ def build_opportunities_email(
         <p style="margin:8px 0 0;font-size:12px;color:#475569;">
           Top {len(top_jobs)} matches · delivered to {html.escape(recipient_email or 'you')}
         </p>
+        {f'<p style="margin:10px 0 0;font-size:13px;color:#fbbf24;">{extra_count} more job{"s" if extra_count != 1 else ""} are waiting for your glance on Career OS — visit the Jobs feed to see them all.</p>' if extra_count > 0 else ''}
       </td></tr>
       <tr><td>
         <table width="100%" cellpadding="0" cellspacing="0" role="presentation">

@@ -147,6 +147,7 @@ function PlatformSessionCard({
             <Button
               type="button"
               size="sm"
+              className="min-h-10 touch-manipulation"
               disabled={doneLoading}
               onClick={() => onManualDone(platform, manualWait.mode)}
             >
@@ -163,6 +164,7 @@ function PlatformSessionCard({
                 type="button"
                 size="sm"
                 variant="outline"
+                className="min-h-10 touch-manipulation"
                 disabled={actionLoading === `${platform}-prepare`}
                 onClick={() => onPrepare(platform)}
               >
@@ -300,22 +302,20 @@ export function Automation() {
     setActionLoading(`${platform}-prepare`)
     setManualWait({ platform, mode: "prepare" })
     showToast(
-      `Chromium opening for ${platform}. Log in, then click Done logging in.`
+      `Browser opening for ${platform}. Log in on your machine, then tap Done logging in.`
     )
     try {
-      const data = await testPlatformSession(platform)
+      await testPlatformSession(platform)
       await loadSessions()
-      showToast(
-        data.message || `Session prepared for ${platform}.`
-      )
+      showToast(`Session prepare started for ${platform}. Tap Done when login is complete.`)
     } catch (err) {
+      setManualWait(null)
       showToast(
         err instanceof Error ? err.message : "Prepare session failed",
         "error"
       )
     } finally {
       setActionLoading("")
-      setManualWait(null)
     }
   }
 
@@ -323,19 +323,20 @@ export function Automation() {
     setActionLoading(`${platform}-open`)
     setManualWait({ platform, mode: "open" })
     showToast(
-      `Opening ${platform} with saved session. Click Done viewing session when finished.`
+      `Opening ${platform} with saved session. Tap Done when finished.`
     )
     try {
       const data = await openPlatformSession(platform)
+      setManualWait(null)
       showToast(data.message || "Browser closed.")
     } catch (err) {
+      setManualWait(null)
       showToast(
         err instanceof Error ? err.message : "Open session failed",
         "error"
       )
     } finally {
       setActionLoading("")
-      setManualWait(null)
     }
   }
 

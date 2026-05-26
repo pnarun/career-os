@@ -145,6 +145,7 @@ def build_job_create(
         remote_priority=normalized_job.get("remote_priority", False),
         india_focused=normalized_job.get("india_focused", False),
         actionable_in_india=normalized_job.get("actionable_in_india", True),
+        company_tag=normalized_job.get("company_tag", ""),
         matched_skills=match_analysis["matched_skills"],
         missing_skills=match_analysis["missing_skills"],
         match_percentage=match_analysis["match_percentage"],
@@ -330,6 +331,7 @@ async def get_unified_jobs_feed(
     strong_matches_only: bool = False,
     remote_high_match: bool = False,
     easy_apply_high_match: bool = False,
+    company: str | None = None,
 ) -> UnifiedFeedResponse:
     """Build unified feed from the latest stored scan batch."""
     jobs = await get_latest_scan_jobs()
@@ -371,6 +373,7 @@ async def get_unified_jobs_feed(
         strong_matches_only=strong_matches_only,
         remote_high_match=remote_high_match,
         easy_apply_high_match=easy_apply_high_match,
+        company=company,
     )
 
 
@@ -495,20 +498,30 @@ async def discover_and_store_jobs(resume_id: str | None = None) -> ScanFetchResp
             await emit_provider_batch(user_id, providers=provider_batch, scan_id=scan_id)
 
     latest_resume = await _resolve_resume_for_scan(resume_id)
-    shown_cache = await load_shown_job_cache()
-    skipped_already_shown = 0
+    from app.services.application_service import was_job_already_applied
+    from app.services.user_preferences_service import get_preferences
+
+    prefs = await get_preferences()
+    target_companies = list(getattr(prefs, "target_companies", None) or []) if prefs else []
+
+    skipped_already_applied = 0
     quality_rejected = 0
     matched_candidates: list[dict[str, Any]] = []
 
     for job in normalized_jobs:
-        if await was_job_already_shown(
+        if await was_job_already_applied(
             job["apply_url"],
             job["title"],
             job["company"],
-            cache=shown_cache,
         ):
-            skipped_already_shown += 1
+            skipped_already_applied += 1
             continue
+
+        company_lower = (job.get("company") or "").lower()
+        for tc in target_companies:
+            if tc and tc.lower() in company_lower:
+                job["company_tag"] = tc
+                break
 
         description = job["description"] or f"{job['title']} at {job['company']}"
         analysis = match_resume_to_job(
@@ -577,10 +590,10 @@ async def discover_and_store_jobs(resume_id: str | None = None) -> ScanFetchResp
         logger.exception("Failed to persist scan session analytics (scan continues)")
 
     logger.info(
-        "Scan %s complete: stored=%d skipped_history=%d",
+        "Scan %s complete: stored=%d skipped_applied=%d",
         scan_id,
         stored_count,
-        skipped_already_shown,
+        skipped_already_applied,
     )
 
     if user_id:
@@ -598,7 +611,7 @@ async def discover_and_store_jobs(resume_id: str | None = None) -> ScanFetchResp
         filtered=filtered_out,
         accepted=len(normalized_jobs),
         stored=stored_count,
-        skipped_already_shown=skipped_already_shown,
+        skipped_already_shown=skipped_already_applied,
         top_jobs_returned=stored_count,
         quality_rejected=quality_rejected,
         resume_id=latest_resume.id,
@@ -658,15 +671,12 @@ async def fetch_and_merge_linkedin_jobs(
         scan_id = generate_scan_id()
         scan_timestamp = _utc_now_iso()
 
-    shown_cache = await load_shown_job_cache()
-    matched_candidates: list[dict[str, Any]] = []
     skipped = 0
     for job in filtered_jobs:
-        if await was_job_already_shown(
+        if await was_job_already_applied(
             job["apply_url"],
             job["title"],
             job["company"],
-            cache=shown_cache,
         ):
             skipped += 1
             continue

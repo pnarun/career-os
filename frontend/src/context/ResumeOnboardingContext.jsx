@@ -65,10 +65,10 @@ export function ResumeOnboardingProvider({ children }) {
   }, [userId, hasResume])
 
   useEffect(() => {
-    if (loading || !userId || hasResume || !isNewUserFlow || showModal) return
+    if (loading || !userId || hasResume || !isNewUserFlow || showModal || resumeGateEnforced) return
     if (shouldShowPlatformTour(userId)) return
     setShowModal(true)
-  }, [loading, userId, hasResume, isNewUserFlow, showModal])
+  }, [loading, userId, hasResume, isNewUserFlow, showModal, resumeGateEnforced])
 
   const acknowledgeResumeRequired = useCallback(() => {
     setResumeGateEnforced(true)

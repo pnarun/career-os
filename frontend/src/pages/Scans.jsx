@@ -12,6 +12,7 @@ import {
 } from "lucide-react"
 
 import { EmailPreviewModal } from "@/components/EmailPreviewModal"
+import { SlowLoadingPageCenter, SlowLoadingPanel } from "@/components/SlowLoadingStatus"
 import { LiveExecutionTimeline } from "@/components/scans/LiveExecutionTimeline"
 import { ScanDetailModal } from "@/components/scans/ScanDetailModal"
 import { useFeedVersion, useRealtimeConnection } from "@/context/RealtimeContext"
@@ -239,11 +240,7 @@ export function Scans() {
   }
 
   if (loading) {
-    return (
-      <div className="flex min-h-[50vh] items-center justify-center">
-        <Loader2 className="size-8 animate-spin text-muted-foreground" />
-      </div>
-    )
+    return <SlowLoadingPageCenter active messageKey="scan-center" />
   }
 
   const stats = data?.stats || {}
@@ -290,23 +287,30 @@ export function Scans() {
       )}
 
       <Card className="border-indigo-500/20 bg-indigo-500/5">
-        <CardContent className="flex flex-wrap gap-3 pt-6">
-          <Button onClick={onRunScan} disabled={!!busy || !preferenceId}>
-            {busy === "scan" ? <Loader2 className="size-4 animate-spin" /> : <Play className="size-4" />}
-            Run Scan Now
-          </Button>
-          <Button variant="outline" onClick={onSendTestEmail} disabled={!!busy || !preferenceId}>
-            {busy === "email" ? <Loader2 className="size-4 animate-spin" /> : <Mail className="size-4" />}
-            Send Test Email
-          </Button>
-          <Button variant="outline" onClick={onPreview} disabled={!!busy}>
-            <Eye className="size-4" />
-            Preview Digest
-          </Button>
-          <Button variant="outline" onClick={onRunScan} disabled={!!busy || !preferenceId}>
-            <RotateCcw className="size-4" />
-            Retry Failed Providers
-          </Button>
+        <CardContent className="flex flex-col gap-4 pt-6">
+          <div className="flex flex-wrap gap-3">
+            <Button onClick={onRunScan} disabled={!!busy || !preferenceId}>
+              {busy === "scan" ? <Loader2 className="size-4 animate-spin" /> : <Play className="size-4" />}
+              Run Scan Now
+            </Button>
+            <Button variant="outline" onClick={onSendTestEmail} disabled={!!busy || !preferenceId}>
+              {busy === "email" ? <Loader2 className="size-4 animate-spin" /> : <Mail className="size-4" />}
+              Send Test Email
+            </Button>
+            <Button variant="outline" onClick={onPreview} disabled={!!busy}>
+              <Eye className="size-4" />
+              Preview Digest
+            </Button>
+            <Button variant="outline" onClick={onRunScan} disabled={!!busy || !preferenceId}>
+              <RotateCcw className="size-4" />
+              Retry Failed Providers
+            </Button>
+          </div>
+          {busy === "scan" ? <SlowLoadingPanel active messageKey="scan" minHeight="140px" /> : null}
+          {busy === "email" ? <SlowLoadingPanel active messageKey="email" minHeight="140px" /> : null}
+          {busy === "preview" ? (
+            <SlowLoadingPanel active messageKey="email-preview" minHeight="120px" />
+          ) : null}
         </CardContent>
       </Card>
 

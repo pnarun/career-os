@@ -29,6 +29,7 @@ APPLICATIONS_COLLECTION = "applications"
 ACTIVE_STATUSES = frozenset(APPLICATION_STATUSES)
 INTERVIEW_STATUSES = frozenset({"interview", "assessment"})
 REJECTION_STATUSES = frozenset({"rejected", "ghosted"})
+TRACKED_APPLY_STATUSES = frozenset({"applied", "interview", "assessment", "offer", "rejected", "ghosted", "withdrawn"})
 
 
 class ApplicationServiceError(Exception):
@@ -312,6 +313,31 @@ async def build_job_application_map() -> dict[str, ApplicationDocument]:
         if job_key and job_key not in mapping:
             mapping[job_key] = app
     return mapping
+
+
+async def was_job_already_applied(
+    apply_url: str,
+    title: str,
+    company: str,
+) -> bool:
+    """True if user already marked this job applied (or further in pipeline)."""
+    collection = _get_collection()
+    clauses: list[dict[str, Any]] = []
+    if (apply_url or "").strip():
+        clauses.append({
+            "apply_url": apply_url.strip(),
+            "status": {"$in": sorted(TRACKED_APPLY_STATUSES)},
+        })
+    if (title or "").strip() and (company or "").strip():
+        clauses.append({
+            "title": title.strip(),
+            "company": company.strip(),
+            "status": {"$in": sorted(TRACKED_APPLY_STATUSES)},
+        })
+    if not clauses:
+        return False
+    document = await collection.find_one(_scoped_query({"$or": clauses}), {"_id": 1})
+    return document is not None
 
 
 async def get_application_by_job_id(job_id: str) -> ApplicationDocument | None:

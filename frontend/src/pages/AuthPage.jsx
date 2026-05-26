@@ -2,9 +2,12 @@ import { useState } from "react"
 import { ArrowLeft, Briefcase, Loader2 } from "lucide-react"
 
 import { useAuth } from "@/context/AuthContext"
+import { SlowLoadingFormHint } from "@/components/SlowLoadingStatus"
+import { WakeAwareButton } from "@/components/WakeAwareButton"
 import { Button } from "@/components/ui/button"
 import { PasswordInput } from "@/components/ui/PasswordInput"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { useBackendWake } from "@/context/BackendWakeContext"
 import * as authApi from "@/services/authService"
 
 const inputClass =
@@ -20,6 +23,7 @@ function detectTimezone() {
 
 export function AuthPage({ onBack }) {
   const { login, register } = useAuth()
+  const { ready } = useBackendWake()
   const [step, setStep] = useState("email")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -31,6 +35,7 @@ export function AuthPage({ onBack }) {
   const [error, setError] = useState(null)
   const [message, setMessage] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [busyAction, setBusyAction] = useState(null)
 
   const resetAlerts = () => {
     setError(null)
@@ -49,6 +54,7 @@ export function AuthPage({ onBack }) {
 
   const onEmailContinue = async (e) => {
     e.preventDefault()
+    setBusyAction("check-email")
     setBusy(true)
     resetAlerts()
     try {
@@ -58,11 +64,13 @@ export function AuthPage({ onBack }) {
       setError(err instanceof Error ? err.message : "Could not verify email")
     } finally {
       setBusy(false)
+      setBusyAction(null)
     }
   }
 
   const onLogin = async (e) => {
     e.preventDefault()
+    setBusyAction("login")
     setBusy(true)
     resetAlerts()
     try {
@@ -71,11 +79,13 @@ export function AuthPage({ onBack }) {
       setError(err instanceof Error ? err.message : "Sign in failed")
     } finally {
       setBusy(false)
+      setBusyAction(null)
     }
   }
 
   const onOnboarding = async (e) => {
     e.preventDefault()
+    setBusyAction("register")
     setBusy(true)
     resetAlerts()
     try {
@@ -92,6 +102,7 @@ export function AuthPage({ onBack }) {
       setError(err instanceof Error ? err.message : "Could not create account")
     } finally {
       setBusy(false)
+      setBusyAction(null)
     }
   }
 
@@ -102,6 +113,7 @@ export function AuthPage({ onBack }) {
     setOtpSent(false)
     setDevOtpHint("")
     resetAlerts()
+    setBusyAction("reset-send")
     setBusy(true)
     try {
       const result = await authApi.requestPasswordReset(email.trim())
@@ -112,10 +124,12 @@ export function AuthPage({ onBack }) {
       setError(err instanceof Error ? err.message : "Could not send code")
     } finally {
       setBusy(false)
+      setBusyAction(null)
     }
   }
 
   const resendOtp = async () => {
+    setBusyAction("reset-send")
     setBusy(true)
     resetAlerts()
     try {
@@ -126,11 +140,13 @@ export function AuthPage({ onBack }) {
       setError(err instanceof Error ? err.message : "Could not resend code")
     } finally {
       setBusy(false)
+      setBusyAction(null)
     }
   }
 
   const onResetPassword = async (e) => {
     e.preventDefault()
+    setBusyAction("reset-confirm")
     setBusy(true)
     resetAlerts()
     try {
@@ -147,6 +163,7 @@ export function AuthPage({ onBack }) {
       setError(err instanceof Error ? err.message : "Could not reset password")
     } finally {
       setBusy(false)
+      setBusyAction(null)
     }
   }
 
@@ -177,6 +194,11 @@ export function AuthPage({ onBack }) {
           <CardDescription>{descriptions[step]}</CardDescription>
         </CardHeader>
         <CardContent>
+          {!ready ? (
+            <div className="mb-4">
+              <SlowLoadingFormHint active messageKey="backend-wake" />
+            </div>
+          ) : null}
           {step === "email" && onBack ? (
             <button
               type="button"
@@ -213,10 +235,11 @@ export function AuthPage({ onBack }) {
                 />
               </div>
               {error ? <p className="text-sm text-destructive">{error}</p> : null}
-              <Button type="submit" className="w-full" disabled={busy}>
+              <SlowLoadingFormHint active={busy} messageKey={busyAction || "check-email"} />
+              <WakeAwareButton type="submit" className="w-full" disabled={busy}>
                 {busy ? <Loader2 className="size-4 animate-spin" /> : null}
                 Continue
-              </Button>
+              </WakeAwareButton>
             </form>
           ) : null}
 
@@ -244,10 +267,11 @@ export function AuthPage({ onBack }) {
                 </button>
               </div>
               {error ? <p className="text-sm text-destructive">{error}</p> : null}
-              <Button type="submit" className="w-full" disabled={busy}>
+              <SlowLoadingFormHint active={busy} messageKey={busyAction || "login"} />
+              <WakeAwareButton type="submit" className="w-full" disabled={busy}>
                 {busy ? <Loader2 className="size-4 animate-spin" /> : null}
                 Sign in
-              </Button>
+              </WakeAwareButton>
             </form>
           ) : null}
 
@@ -277,10 +301,11 @@ export function AuthPage({ onBack }) {
                 <p className="text-xs text-muted-foreground">At least 8 characters</p>
               </div>
               {error ? <p className="text-sm text-destructive">{error}</p> : null}
-              <Button type="submit" className="w-full" disabled={busy}>
+              <SlowLoadingFormHint active={busy} messageKey={busyAction || "register"} />
+              <WakeAwareButton type="submit" className="w-full" disabled={busy}>
                 {busy ? <Loader2 className="size-4 animate-spin" /> : null}
                 Get started
-              </Button>
+              </WakeAwareButton>
             </form>
           ) : null}
 
@@ -330,10 +355,13 @@ export function AuthPage({ onBack }) {
                 </button>
               </div>
               {error ? <p className="text-sm text-destructive">{error}</p> : null}
-              <Button type="submit" className="w-full" disabled={busy || !otpSent}>
-                {busy ? <Loader2 className="size-4 animate-spin" /> : null}
+              <SlowLoadingFormHint
+                active={busy}
+                messageKey={busyAction === "reset-confirm" ? "reset-confirm" : "reset-send"}
+              />
+              <WakeAwareButton type="submit" className="w-full" disabled={busy || !otpSent}>
                 Update password & sign in
-              </Button>
+              </WakeAwareButton>
             </form>
           ) : null}
         </CardContent>

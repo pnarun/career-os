@@ -9,6 +9,7 @@ import {
   TrendingUp,
 } from "lucide-react"
 
+import { SlowLoadingPageCenter } from "@/components/SlowLoadingStatus"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
@@ -193,9 +194,7 @@ export function Notifications() {
             </CardHeader>
             <CardContent>
               {loading ? (
-                <div className="flex justify-center py-12">
-                  <Loader2 className="size-6 animate-spin text-muted-foreground" />
-                </div>
+                <SlowLoadingPageCenter active messageKey="notifications" className="min-h-[200px]" />
               ) : notifications.length === 0 ? (
                 <p className="py-8 text-center text-sm text-muted-foreground">
                   No notifications in this category yet.

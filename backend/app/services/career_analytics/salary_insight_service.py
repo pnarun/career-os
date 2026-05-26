@@ -17,8 +17,18 @@ from app.services.job_service import get_latest_scan_jobs
 from app.services.user_preferences_service import get_preferences
 
 
-async def build_salary_insights() -> dict[str, Any]:
+USD_TO_INR = 83
+
+
+def _usd_to_inr(amount: int) -> int:
+    return int(amount * USD_TO_INR)
+
+
+async def build_salary_insights(target_role: str | None = None) -> dict[str, Any]:
     jobs = await get_latest_scan_jobs()
+    if target_role and target_role.strip():
+        needle = target_role.strip().lower()
+        jobs = [j for j in jobs if needle in (j.title or "").lower()]
     preferences = await get_preferences()
 
     parsed_salaries: list[int] = []
@@ -42,18 +52,21 @@ async def build_salary_insights() -> dict[str, Any]:
     benchmark = ROLE_SALARY_BENCHMARKS.get(primary_role, ROLE_SALARY_BENCHMARKS["general"])
 
     if parsed_salaries:
-        avg = int(sum(parsed_salaries) / len(parsed_salaries))
-        salary_range = f"${min(parsed_salaries):,} – ${max(parsed_salaries):,}"
+        avg_usd = int(sum(parsed_salaries) / len(parsed_salaries))
+        avg = _usd_to_inr(avg_usd)
+        lo, hi = _usd_to_inr(min(parsed_salaries)), _usd_to_inr(max(parsed_salaries))
+        salary_range = f"₹{lo:,} – ₹{hi:,}"
     else:
-        avg = int((benchmark[0] + benchmark[1]) / 2)
-        salary_range = f"${benchmark[0]:,} – ${benchmark[1]:,} (estimated)"
+        avg = _usd_to_inr(int((benchmark[0] + benchmark[1]) / 2))
+        lo, hi = _usd_to_inr(benchmark[0]), _usd_to_inr(benchmark[1])
+        salary_range = f"₹{lo:,} – ₹{hi:,} (estimated)"
 
     top_paying_skills: list[dict[str, Any]] = []
     if skill_salary_map:
         for skill, values in skill_salary_map.items():
             top_paying_skills.append({
                 "skill": skill,
-                "avg_salary": int(sum(values) / len(values)),
+                "avg_salary": _usd_to_inr(int(sum(values) / len(values))),
                 "job_count": len(values),
             })
         top_paying_skills.sort(key=lambda x: x["avg_salary"], reverse=True)

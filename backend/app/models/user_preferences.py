@@ -46,6 +46,8 @@ class UserPreferencesCreate(BaseModel):
     scan_completion_alerts: bool = True
     auto_email_on_scan: bool = True
     target_roles: list[str] = Field(default_factory=list)
+    target_skills: list[str] = Field(default_factory=list)
+    target_companies: list[str] = Field(default_factory=list)
     years_experience: int = Field(default=0, ge=0, le=50)
     use_default_six_hour_schedule: bool = True
 
@@ -80,6 +82,8 @@ class UserPreferencesUpdate(BaseModel):
     scan_completion_alerts: bool | None = None
     auto_email_on_scan: bool | None = None
     target_roles: list[str] | None = None
+    target_skills: list[str] | None = None
+    target_companies: list[str] | None = None
     years_experience: int | None = Field(default=None, ge=0, le=50)
     use_default_six_hour_schedule: bool | None = None
 
@@ -121,6 +125,8 @@ class UserPreferencesDocument(BaseModel):
     scan_completion_alerts: bool = True
     auto_email_on_scan: bool = True
     target_roles: list[str] = Field(default_factory=list)
+    target_skills: list[str] = Field(default_factory=list)
+    target_companies: list[str] = Field(default_factory=list)
     years_experience: int = Field(default=0, ge=0, le=50)
     use_default_six_hour_schedule: bool = True
 
@@ -163,6 +169,8 @@ class UserPreferencesDocument(BaseModel):
             scan_completion_alerts=document.get("scan_completion_alerts", True),
             auto_email_on_scan=document.get("auto_email_on_scan", True),
             target_roles=list(document.get("target_roles") or []),
+            target_skills=list(document.get("target_skills") or []),
+            target_companies=list(document.get("target_companies") or []),
             years_experience=int(document.get("years_experience") or 0),
             use_default_six_hour_schedule=document.get("use_default_six_hour_schedule", True),
         )

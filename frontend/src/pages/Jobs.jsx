@@ -31,6 +31,11 @@ import { cn } from "@/lib/utils"
 import { fetchHistoricalJobs } from "@/services/jobDebugService"
 import { DebugSummaryPanel } from "@/components/DebugSummaryPanel"
 import { JobApplicationActions } from "@/components/JobApplicationActions"
+import {
+  JobDiscoveryLoading,
+  JobDiscoveryLoadingInline,
+} from "@/components/JobDiscoveryLoading"
+import { JobDescriptionModal } from "@/components/JobDescriptionModal"
 import { JobDetailsModal } from "@/components/JobDetailsModal"
 import { ProviderFeedSummary } from "@/components/ProviderFeedSummary"
 import { ScanAnalyticsPanel } from "@/components/ScanAnalyticsPanel"
@@ -135,7 +140,7 @@ function SkillTags({ items, variant }) {
   )
 }
 
-const JobCard = memo(function JobCard({ job, showScanMeta, showQualityDebug, onViewDetails }) {
+const JobCard = memo(function JobCard({ job, showScanMeta, showQualityDebug, onViewDetails, onViewDescription }) {
   const variant = getMatchBadgeVariant(job.recommendation)
   const locationCategory = getLocationCategory(job)
   const qualityScore = getJobQualityScore(job)
@@ -151,7 +156,15 @@ const JobCard = memo(function JobCard({ job, showScanMeta, showQualityDebug, onV
       <CardHeader>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 space-y-1">
-            <ProviderIconBadge source={job.source} className="mb-2" />
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <ProviderIconBadge source={job.source} />
+              {job.company_tag ? (
+                <TagBadge
+                  label={job.company_tag}
+                  className="bg-violet-500/10 text-violet-300 border-violet-500/30"
+                />
+              ) : null}
+            </div>
             <CardTitle className="text-base leading-snug">{job.title}</CardTitle>
             <CardDescription className="font-medium text-foreground/80">
               {job.company}
@@ -266,10 +279,13 @@ const JobCard = memo(function JobCard({ job, showScanMeta, showQualityDebug, onV
           </div>
         )}
       </CardContent>
-      <CardFooter className="flex flex-col gap-2">
-        <JobApplicationActions job={job} compact />
+      <CardFooter className="flex flex-col gap-2 border-t border-border/60 pt-4">
+        <JobApplicationActions job={job} iconOnly />
         <Button type="button" variant="secondary" className="w-full" onClick={() => onViewDetails?.(job)}>
           View match analysis
+        </Button>
+        <Button type="button" variant="outline" className="w-full" onClick={() => onViewDescription?.(job)}>
+          Job description
         </Button>
         {showApply ? (
           <Button
@@ -314,6 +330,8 @@ export function Jobs() {
   const [hasFetched, setHasFetched] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [selectedJob, setSelectedJob] = useState(null)
+  const [descriptionJob, setDescriptionJob] = useState(null)
+  const [companyFilter, setCompanyFilter] = useState("")
   const [strongMatchesOnly, setStrongMatchesOnly] = useState(false)
   const [remoteHighMatch, setRemoteHighMatch] = useState(false)
   const [easyApplyHighMatch, setEasyApplyHighMatch] = useState(false)
@@ -331,6 +349,7 @@ export function Jobs() {
       strongMatchesOnly,
       remoteHighMatch,
       easyApplyHighMatch,
+      company: companyFilter.trim() || undefined,
     }),
     [
       selectedProviders,
@@ -342,6 +361,7 @@ export function Jobs() {
       strongMatchesOnly,
       remoteHighMatch,
       easyApplyHighMatch,
+      companyFilter,
     ]
   )
 
@@ -526,6 +546,7 @@ export function Jobs() {
 
   const isFetching = isRefreshing
   const isLoadingJobs = status === "loading" && !isRefreshing && displayJobs.length === 0
+  const isDiscoveringJobs = isFetching || isLoadingJobs
   const resolvedScanSummary = useMemo(
     () => resolveScanSummary(scanSummary, scanAnalytics),
     [scanSummary, scanAnalytics]
@@ -535,9 +556,9 @@ export function Jobs() {
   const activeScanTime =
     scanSummary?.scan_timestamp ?? displayJobs[0]?.scan_timestamp
 
-  const showEmpty = displayJobs.length === 0 && !isLoadingJobs
+  const showEmpty = displayJobs.length === 0 && !isDiscoveringJobs
   const showFilterEmpty =
-    displayJobs.length > 0 && filteredJobs.length === 0 && !isLoadingJobs
+    displayJobs.length > 0 && filteredJobs.length === 0 && !isDiscoveringJobs
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -624,6 +645,20 @@ export function Jobs() {
                   className="h-9 w-full rounded-lg border border-input bg-background pl-9 pr-3 text-sm"
                 />
               </div>
+            </div>
+
+            <div className="flex min-w-[160px] flex-col gap-1.5">
+              <label htmlFor="company-filter" className="text-xs font-medium text-muted-foreground">
+                Company
+              </label>
+              <input
+                id="company-filter"
+                type="search"
+                value={companyFilter}
+                onChange={(e) => setCompanyFilter(e.target.value)}
+                placeholder="Amazon, Flipkart…"
+                className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm"
+              />
             </div>
 
             <div className="flex min-w-[140px] flex-col gap-1.5">
@@ -798,12 +833,7 @@ export function Jobs() {
               </p>
             )}
 
-            {isFetching && (
-              <p className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="size-3.5 animate-spin" />
-                Building fresh scan batch…
-              </p>
-            )}
+            {isFetching && <JobDiscoveryLoadingInline />}
           </CardContent>
         </Card>
       )}
@@ -815,14 +845,7 @@ export function Jobs() {
         </div>
       )}
 
-      {isLoadingJobs && (
-        <Card>
-          <CardContent className="flex min-h-[120px] items-center justify-center gap-2 py-8">
-            <Loader2 className="size-5 animate-spin text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Loading jobs…</span>
-          </CardContent>
-        </Card>
-      )}
+      {isDiscoveringJobs && <JobDiscoveryLoading />}
 
       {showEmpty ? (
         <Card>
@@ -858,10 +881,16 @@ export function Jobs() {
               showScanMeta={historicalMode}
               showQualityDebug={historicalMode}
               onViewDetails={setSelectedJob}
+              onViewDescription={setDescriptionJob}
             />
           )}
         />
       )}
+      <JobDescriptionModal
+        job={descriptionJob}
+        open={Boolean(descriptionJob)}
+        onClose={() => setDescriptionJob(null)}
+      />
       <DebugSummaryPanel
         historicalMode={historicalMode}
         displayJobsCount={displayJobs.length}

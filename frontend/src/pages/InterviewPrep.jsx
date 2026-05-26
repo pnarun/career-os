@@ -15,6 +15,7 @@ import {
   ReadinessGauge,
   TopicConfidenceBars,
 } from "@/components/interviewPrep/InterviewPrepCharts"
+import { SlowLoadingFormHint, SlowLoadingPageCenter, SlowLoadingPanel } from "@/components/SlowLoadingStatus"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
@@ -188,11 +189,7 @@ export function InterviewPrep() {
   }
 
   if (loading) {
-    return (
-      <div className="flex min-h-[40vh] items-center justify-center">
-        <Loader2 className="size-8 animate-spin text-muted-foreground" />
-      </div>
-    )
+    return <SlowLoadingPageCenter active messageKey="interview-prep" />
   }
 
   const selectedJob = jobList.find((j) => j.job_id === selectedJobId)
@@ -296,11 +293,9 @@ export function InterviewPrep() {
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
-      {detailLoading && (
-        <div className="flex justify-center py-12">
-          <Loader2 className="size-8 animate-spin text-muted-foreground" />
-        </div>
-      )}
+      {detailLoading ? (
+        <SlowLoadingPanel active messageKey="interview-questions" minHeight="180px" />
+      ) : null}
 
       {!detailLoading && data && readiness && (
         <>

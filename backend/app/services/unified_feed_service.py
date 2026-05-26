@@ -90,6 +90,7 @@ def document_to_feed_job(job: JobDocument) -> UnifiedFeedJob:
         job_id=job.id,
         title=job.title,
         company=job.company,
+        company_tag=getattr(job, "company_tag", "") or "",
         location=job.location,
         description=_truncate_description(job.description),
         apply_url=job.apply_url,
@@ -195,6 +196,7 @@ def apply_feed_filters(
     strong_matches_only: bool = False,
     remote_high_match: bool = False,
     easy_apply_high_match: bool = False,
+    company: str | None = None,
 ) -> list[UnifiedFeedJob]:
     filtered = jobs
 
@@ -215,6 +217,16 @@ def apply_feed_filters(
             j
             for j in filtered
             if j.source.strip().lower().replace(" ", "") in allowed
+        ]
+
+    if company and company.strip():
+        needle = company.strip().lower()
+        filtered = [
+            j
+            for j in filtered
+            if needle in j.company.lower()
+            or needle in (j.company_tag or "").lower()
+            or needle == j.source.lower()
         ]
 
     if remote_only:
@@ -270,6 +282,7 @@ async def build_unified_feed_from_documents(
     strong_matches_only: bool = False,
     remote_high_match: bool = False,
     easy_apply_high_match: bool = False,
+    company: str | None = None,
 ) -> UnifiedFeedResponse:
     feed_jobs: list[UnifiedFeedJob] = []
     for job in jobs:
@@ -289,6 +302,7 @@ async def build_unified_feed_from_documents(
         strong_matches_only=strong_matches_only,
         remote_high_match=remote_high_match,
         easy_apply_high_match=easy_apply_high_match,
+        company=company,
     )
     provider_counts = build_provider_counts(provider_raw_counts)
 

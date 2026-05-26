@@ -8,6 +8,8 @@ import {
 } from "lucide-react"
 
 import { ProviderPriorityList } from "@/components/settings/ProviderPriorityList"
+import { TagCombobox } from "@/components/settings/TagCombobox"
+import { SlowLoadingFormHint, SlowLoadingPageCenter } from "@/components/SlowLoadingStatus"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ALL_PROVIDERS } from "@/services/scansService"
@@ -40,7 +42,7 @@ const defaultForm = {
   email: "",
   resume_id: "",
   timezone: "Asia/Kolkata",
-  preferred_locations: "",
+  preferred_locations: [],
   remote_only: false,
   min_match_threshold: 50,
   career_focus: "general",
@@ -57,6 +59,9 @@ const defaultForm = {
   notice_period_days: 30,
   work_authorization: "Authorized to work",
   expected_salary: "",
+  target_roles: [],
+  target_skills: [],
+  target_companies: [],
 }
 
 const inputClass =
@@ -82,7 +87,12 @@ export function Settings() {
           email: prefs.email ?? "",
           resume_id: prefs.resume_id ?? "",
           timezone: prefs.timezone ?? "Asia/Kolkata",
-          preferred_locations: (prefs.preferred_locations ?? []).join(", "),
+          preferred_locations: Array.isArray(prefs.preferred_locations)
+            ? prefs.preferred_locations
+            : String(prefs.preferred_locations || "")
+                .split(",")
+                .map((s) => s.trim())
+                .filter(Boolean),
           remote_only: prefs.remote_only ?? false,
           min_match_threshold: prefs.min_match_threshold ?? 50,
           career_focus: prefs.career_focus ?? "general",
@@ -99,6 +109,9 @@ export function Settings() {
           notice_period_days: prefs.notice_period_days ?? 30,
           work_authorization: prefs.work_authorization ?? "Authorized to work",
           expected_salary: prefs.expected_salary ?? "",
+          target_roles: prefs.target_roles ?? [],
+          target_skills: prefs.target_skills ?? [],
+          target_companies: prefs.target_companies ?? [],
         })
       } else if (resumeList.length > 0) {
         setForm((prev) => ({
@@ -157,10 +170,12 @@ export function Settings() {
       email: form.email.trim(),
       resume_id: form.resume_id,
       timezone: form.timezone,
-      preferred_locations: form.preferred_locations
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean),
+      preferred_locations: Array.isArray(form.preferred_locations)
+        ? form.preferred_locations
+        : String(form.preferred_locations || "")
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean),
       remote_only: form.remote_only,
       min_match_threshold: Number(form.min_match_threshold) || 50,
       career_focus: form.career_focus,
@@ -177,6 +192,9 @@ export function Settings() {
       notice_period_days: Number(form.notice_period_days) || 30,
       work_authorization: form.work_authorization.trim(),
       expected_salary: form.expected_salary.trim(),
+      target_roles: form.target_roles.slice(0, 10),
+      target_skills: form.target_skills.slice(0, 50),
+      target_companies: form.target_companies.slice(0, 20),
     }
     if (isCreate) {
       return {
@@ -230,18 +248,54 @@ export function Settings() {
       </div>
 
       {isLoading ? (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="size-4 animate-spin" />
-          Loading…
-        </div>
+        <SlowLoadingPageCenter active messageKey="settings-load" className="min-h-[30vh]" />
       ) : (
         <>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Job search profile</CardTitle>
+              <CardDescription>
+                Roles and skills drive scans across LinkedIn, Naukri, Instahyre, and more. Updated
+                when you upload a resume; you can edit here.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6 overflow-visible">
+              <TagCombobox
+                label="Target roles (max 10)"
+                hint="e.g. Angular Developer, Senior Full Stack Engineer"
+                kind="roles"
+                maxItems={10}
+                items={form.target_roles}
+                onChange={(items) => onChange("target_roles", items)}
+                placeholder="Search roles…"
+              />
+              <TagCombobox
+                label="Skills (max 50)"
+                hint="Used for matching — jobs are not removed for missing skills"
+                kind="skills"
+                maxItems={50}
+                items={form.target_skills}
+                onChange={(items) => onChange("target_skills", items)}
+                placeholder="Search skills…"
+              />
+              <TagCombobox
+                label="Target companies"
+                hint="Tagged on matching jobs; filter in Jobs feed (e.g. Amazon, Flipkart)"
+                kind="companies"
+                maxItems={20}
+                items={form.target_companies}
+                onChange={(items) => onChange("target_companies", items)}
+                placeholder="Search companies…"
+              />
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle className="text-base">User Preferences</CardTitle>
               <CardDescription>Profile and job discovery defaults</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 overflow-visible">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Email address</label>
                 <input
@@ -290,15 +344,15 @@ export function Settings() {
                   />
                 </div>
               </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium">Default locations (comma-separated)</label>
-                <input
-                  value={form.preferred_locations}
-                  onChange={(e) => onChange("preferred_locations", e.target.value)}
-                  placeholder="Bangalore, Remote"
-                  className={inputClass}
-                />
-              </div>
+              <TagCombobox
+                label="Default locations"
+                hint="Used for scans and location matching (e.g. Bangalore, Remote)"
+                kind="locations"
+                maxItems={15}
+                items={form.preferred_locations}
+                onChange={(items) => onChange("preferred_locations", items)}
+                placeholder="Search locations…"
+              />
               <label className="flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"
@@ -434,10 +488,13 @@ export function Settings() {
         </div>
       )}
 
-      <Button onClick={onSave} disabled={isSaving || isLoading}>
-        {isSaving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-        Save preferences
-      </Button>
+      <div className="space-y-3">
+        <SlowLoadingFormHint active={isSaving} messageKey="settings-save" />
+        <Button onClick={onSave} disabled={isSaving || isLoading}>
+          {isSaving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+          Save preferences
+        </Button>
+      </div>
     </div>
   )
 }

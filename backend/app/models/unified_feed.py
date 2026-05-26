@@ -9,6 +9,7 @@ class UnifiedFeedJob(BaseModel):
     job_id: str = ""
     title: str = ""
     company: str = ""
+    company_tag: str = ""
     location: str = ""
     description: str = ""
     apply_url: str = ""

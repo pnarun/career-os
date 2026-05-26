@@ -22,11 +22,14 @@ import {
 
 const CHART_TOOLTIP = {
   contentStyle: {
-    background: "hsl(var(--background))",
-    border: "1px solid hsl(var(--border))",
+    background: "#1c1917",
+    border: "1px solid #f59e0b",
     borderRadius: "8px",
     fontSize: "12px",
+    color: "#fde68a",
   },
+  labelStyle: { color: "#fbbf24", fontWeight: 600 },
+  itemStyle: { color: "#fdba74" },
 }
 
 export function GrowthScoreGauge({ score, size = 120 }) {
@@ -79,8 +82,8 @@ export function SalaryBarChart({ data }) {
       <BarChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 40 }}>
         <CartesianGrid strokeDasharray="3 3" className="stroke-border/40" />
         <XAxis dataKey="skill" tick={{ fontSize: 11 }} angle={-30} textAnchor="end" height={60} />
-        <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
-        <Tooltip {...CHART_TOOLTIP} formatter={(v) => [`$${Number(v).toLocaleString()}`, "Avg Salary"]} />
+        <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `₹${(Number(v) / 100000).toFixed(1)}L`} />
+        <Tooltip {...CHART_TOOLTIP} formatter={(v) => [`₹${Number(v).toLocaleString("en-IN")}`, "Avg Salary (INR)"]} />
         <Bar dataKey="salary" fill="#6366f1" radius={[4, 4, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>

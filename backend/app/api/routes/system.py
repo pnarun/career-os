@@ -6,10 +6,16 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, Query
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 
+from app.api.routes.logs_view_html import render_logs_page
 from app.core.cache import cache_get, cache_set, cache_key
 from app.core.log_buffer import log_buffer
+from app.services.logs_view_service import (
+    distinct_users,
+    export_logs_csv,
+    get_log_entries,
+)
 from app.core.circuit_breaker import circuit_breaker_status
 from app.core.config import settings
 from app.core.database import get_database
@@ -30,70 +36,74 @@ async def root() -> RedirectResponse:
 @router.get("/logs", response_class=HTMLResponse, include_in_schema=False)
 async def logs_viewer(
     limit: int = Query(default=200, ge=10, le=500),
+    user: str = Query(default=""),
+    level: str = Query(default=""),
 ) -> HTMLResponse:
-    """Live tail of recent API logs (same stream as Render dashboard)."""
-    lines = log_buffer.tail(limit)
-    body = "\n".join(lines) if lines else "(no logs captured yet — trigger API traffic)"
-    escaped = (
-        body.replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
+    """Tabular log viewer with user filter and CSV export."""
+    entries = get_log_entries(limit=limit, user_filter=user, level_filter=level)
+    users = distinct_users(get_log_entries(limit=limit))
+    html = render_logs_page(
+        entries=entries,
+        users=users,
+        limit=limit,
+        user_filter=user.strip(),
+        level_filter=level.strip().upper(),
+        app_name=settings.APP_NAME,
+        environment=settings.ENVIRONMENT,
     )
-    html = f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8"/>
-  <meta http-equiv="refresh" content="5"/>
-  <title>Career OS — Logs</title>
-  <style>
-    body {{ margin:0; background:#0f172a; color:#e2e8f0; font-family:ui-monospace,monospace; font-size:12px; }}
-    header {{ padding:12px 16px; background:#1e293b; border-bottom:1px solid #334155; display:flex; gap:16px; align-items:center; flex-wrap:wrap; }}
-    header a {{ color:#818cf8; }}
-    pre {{ margin:0; padding:16px; white-space:pre-wrap; word-break:break-word; line-height:1.45; }}
-    .meta {{ color:#94a3b8; font-size:11px; }}
-  </style>
-</head>
-<body>
-  <header>
-    <strong>Career OS API Logs</strong>
-    <span class="meta">{settings.APP_NAME} · {settings.ENVIRONMENT} · {len(lines)} lines · auto-refresh 5s</span>
-    <a href="/logs?limit={limit}">Refresh</a>
-    <a href="/logs/api?limit={limit}">JSON</a>
-    <a href="/health">Health</a>
-    <a href="/docs">Docs</a>
-  </header>
-  <pre>{escaped}</pre>
-</body>
-</html>"""
     return HTMLResponse(html)
+
+
+@router.get("/logs/export", include_in_schema=False)
+async def logs_export(
+    limit: int = Query(default=500, ge=10, le=500),
+    user: str = Query(default=""),
+    level: str = Query(default=""),
+) -> PlainTextResponse:
+    entries = get_log_entries(limit=limit, user_filter=user, level_filter=level)
+    csv_body = export_logs_csv(entries)
+    return PlainTextResponse(
+        content=csv_body,
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": 'attachment; filename="career-os-logs.csv"',
+        },
+    )
 
 
 @router.get("/logs/api", include_in_schema=False)
 async def logs_api(
     limit: int = Query(default=200, ge=10, le=500),
+    user: str = Query(default=""),
+    level: str = Query(default=""),
 ) -> dict[str, Any]:
-    lines = log_buffer.tail(limit)
+    entries = get_log_entries(limit=limit, user_filter=user, level_filter=level)
     return {
         "service": settings.APP_NAME,
         "environment": settings.ENVIRONMENT,
-        "count": len(lines),
-        "lines": lines,
+        "count": len(entries),
+        "entries": entries,
+        "lines": log_buffer.tail(limit),
     }
 
 
 @router.get("/system/logs", response_class=HTMLResponse, include_in_schema=True)
 async def logs_viewer_alias(
     limit: int = Query(default=200, ge=10, le=500),
+    user: str = Query(default=""),
+    level: str = Query(default=""),
 ) -> HTMLResponse:
     """Alias for /logs (visible in OpenAPI)."""
-    return await logs_viewer(limit=limit)
+    return await logs_viewer(limit=limit, user=user, level=level)
 
 
 @router.get("/system/logs/api", include_in_schema=True)
 async def logs_api_alias(
     limit: int = Query(default=200, ge=10, le=500),
+    user: str = Query(default=""),
+    level: str = Query(default=""),
 ) -> dict[str, Any]:
-    return await logs_api(limit=limit)
+    return await logs_api(limit=limit, user=user, level=level)
 
 
 async def _mongo_health() -> dict[str, Any]:

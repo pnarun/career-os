@@ -37,6 +37,8 @@ def _extended_preference_fields(payload) -> dict[str, Any]:
         "scan_completion_alerts",
         "auto_email_on_scan",
         "target_roles",
+        "target_skills",
+        "target_companies",
         "years_experience",
         "use_default_six_hour_schedule",
         "preferred_locations",
@@ -322,6 +324,7 @@ async def apply_scan_profile_from_resume(resume) -> None:
     update = UserPreferencesUpdate(
         resume_id=resume.id,
         target_roles=profile.get("target_roles") or [],
+        target_skills=profile.get("target_skills") or [],
         years_experience=int(profile.get("years_experience") or 0),
         preferred_locations=profile.get("preferred_locations") or [],
     )

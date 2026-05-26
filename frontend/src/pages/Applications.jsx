@@ -11,6 +11,7 @@ import {
 } from "lucide-react"
 
 import { ProviderIconBadge } from "@/components/ProviderIconBadge"
+import { SlowLoadingPageCenter } from "@/components/SlowLoadingStatus"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
@@ -358,10 +359,7 @@ export function Applications() {
       )}
 
       {loading ? (
-        <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground">
-          <Loader2 className="size-5 animate-spin" />
-          Loading applications…
-        </div>
+        <SlowLoadingPageCenter active messageKey="page-load" className="min-h-[30vh]" />
       ) : tabApplications.length === 0 ? (
         <Card>
           <CardContent className="flex min-h-[160px] flex-col items-center justify-center gap-2 py-10 text-center">

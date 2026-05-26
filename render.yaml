@@ -53,7 +53,16 @@ services:
       - key: CLOUDINARY_API_SECRET
         sync: false
 
-  # Optional: uncomment after creating a Render Redis instance
+  - type: cron
+    name: career-os-keepalive
+    schedule: "*/10 * * * *"
+    env: docker
+    dockerfilePath: ./backend/scripts/keepalive/Dockerfile
+    dockerContext: ./backend/scripts/keepalive
+    envVars:
+      - key: API_HEALTH_URL
+        sync: false
+
   # - type: redis
   #   name: career-os-redis
   #   plan: starter

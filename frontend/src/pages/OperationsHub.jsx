@@ -11,8 +11,21 @@ const TABS = [
   { id: "notifications", label: "Notifications" },
 ]
 
+function readInitialTab() {
+  try {
+    const stored = sessionStorage.getItem("operationsHubTab")
+    if (stored && TABS.some((t) => t.id === stored)) {
+      sessionStorage.removeItem("operationsHubTab")
+      return stored
+    }
+  } catch {
+    /* ignore */
+  }
+  return "scans"
+}
+
 export function OperationsHub() {
-  const [tab, setTab] = useState("scans")
+  const [tab, setTab] = useState(readInitialTab)
 
   return (
     <TabbedHub

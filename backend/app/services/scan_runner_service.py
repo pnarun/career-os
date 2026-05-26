@@ -162,7 +162,11 @@ async def _execute_scan(
 
     user_id = preferences.user_id or ""
     if user_id:
-        set_request_user(user_id, preferences.workspace_id or "")
+        set_request_user(
+            user_id,
+            preferences.workspace_id or "",
+            preferences.email or "",
+        )
 
     if user_id:
         await emit_scan_started(

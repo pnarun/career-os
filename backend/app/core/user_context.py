@@ -4,17 +4,21 @@ from contextvars import ContextVar
 
 current_user_id: ContextVar[str | None] = ContextVar("current_user_id", default=None)
 current_workspace_id: ContextVar[str | None] = ContextVar("current_workspace_id", default=None)
+current_user_email: ContextVar[str | None] = ContextVar("current_user_email", default=None)
 
 
-def set_request_user(user_id: str, workspace_id: str = "") -> None:
+def set_request_user(user_id: str, workspace_id: str = "", email: str = "") -> None:
     current_user_id.set(user_id)
     if workspace_id:
         current_workspace_id.set(workspace_id)
+    if email:
+        current_user_email.set(email)
 
 
 def clear_request_user() -> None:
     current_user_id.set(None)
     current_workspace_id.set(None)
+    current_user_email.set(None)
 
 
 def get_request_user_id() -> str | None:
@@ -30,3 +34,7 @@ def require_request_user_id() -> str:
     if not user_id:
         raise RuntimeError("Authenticated user context is required")
     return user_id
+
+
+def get_request_user_email() -> str:
+    return (current_user_email.get() or "").strip() or "system"

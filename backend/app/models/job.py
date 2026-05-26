@@ -29,6 +29,7 @@ class JobCreate(BaseModel):
     remote_priority: bool = False
     india_focused: bool = False
     actionable_in_india: bool = True
+    company_tag: str = ""
     matched_skills: list[str] = Field(default_factory=list)
     missing_skills: list[str] = Field(default_factory=list)
     match_percentage: int = 0
@@ -59,6 +60,7 @@ class JobDocument(BaseModel):
     remote_priority: bool
     india_focused: bool
     actionable_in_india: bool = True
+    company_tag: str = ""
     matched_skills: list[str]
     missing_skills: list[str]
     match_percentage: int
@@ -94,6 +96,7 @@ class JobDocument(BaseModel):
             remote_priority=document.get("remote_priority", False),
             india_focused=document.get("india_focused", False),
             actionable_in_india=document.get("actionable_in_india", True),
+            company_tag=document.get("company_tag", ""),
             matched_skills=document.get("matched_skills", []),
             missing_skills=document.get("missing_skills", []),
             match_percentage=document.get("match_percentage", 0),

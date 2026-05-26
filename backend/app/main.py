@@ -26,6 +26,7 @@ from app.api.routes import career_analytics as career_analytics_routes
 from app.api.routes import copilot as copilot_routes
 from app.api.routes import interview_ai as interview_ai_routes
 from app.api.routes import dashboard as dashboard_routes
+from app.api.routes import suggestions as suggestions_routes
 from app.api.routes import system as system_routes
 from app.services.application_service import ensure_application_indexes
 from app.services.auto_apply.apply_history_service import ensure_apply_indexes
@@ -48,6 +49,7 @@ from app.core.config import settings
 from app.core.database import close_mongo_connection, connect_to_mongo
 from app.core.logging_config import configure_logging
 from app.core.rate_limit import RateLimitMiddleware
+from app.core.user_context_middleware import UserContextMiddleware
 from app.core.redis_client import close_redis, get_redis
 from app.services.scheduler_service import shutdown_scheduler, start_scheduler
 
@@ -118,6 +120,7 @@ _cors_kwargs: dict = {
 if settings.effective_cors_origin_regex:
     _cors_kwargs["allow_origin_regex"] = settings.effective_cors_origin_regex
 app.add_middleware(CORSMiddleware, **_cors_kwargs)
+app.add_middleware(UserContextMiddleware)
 
 logger.info(
     "CORS enabled origins=%s regex=%s cloud=%s",
@@ -138,6 +141,7 @@ app.include_router(dashboard_routes.router, dependencies=_auth)
 app.include_router(jobs_routes.router, dependencies=_auth)
 app.include_router(applications_routes.router, dependencies=_auth)
 app.include_router(preferences_routes.router, dependencies=_auth)
+app.include_router(suggestions_routes.router, dependencies=_auth)
 app.include_router(resumes_routes.router, dependencies=_auth)
 app.include_router(scan_routes.router, dependencies=_auth)
 app.include_router(scan_analytics_routes.router, dependencies=_auth)

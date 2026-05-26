@@ -68,6 +68,7 @@ def build_search_keywords(
     resume: ResumeDocument,
     *,
     target_roles: list[str] | None = None,
+    target_skills: list[str] | None = None,
     max_terms: int = MAX_KEYWORD_TERMS,
 ) -> list[str]:
     """
@@ -94,7 +95,8 @@ def build_search_keywords(
         if len(ordered) >= max_terms:
             break
 
-    for skill in resume.skills:
+    skill_pool = list(target_skills or []) + list(resume.skills or [])
+    for skill in skill_pool:
         add(skill)
         if len(ordered) >= max_terms:
             break
@@ -115,11 +117,14 @@ def build_linkedin_discovery_payload(
     resume: ResumeDocument,
     *,
     target_roles: list[str] | None = None,
+    target_skills: list[str] | None = None,
     preferred_location: str | None = None,
     headless: bool = True,
     capture_screenshots: bool = False,
 ) -> dict[str, Any]:
-    keywords = build_search_keywords(resume, target_roles=target_roles)
+    keywords = build_search_keywords(
+        resume, target_roles=target_roles, target_skills=target_skills
+    )
     location = (preferred_location or "").strip() or DEFAULT_LOCATION
     logger.info(
         "[LINKEDIN] Search context resume=%s keywords=%s location=%s",
@@ -147,6 +152,7 @@ async def resolve_linkedin_discovery_payload(
 
     effective_resume_id = resume_id
     target_roles: list[str] = []
+    target_skills: list[str] = []
     preferred_location = DEFAULT_LOCATION
     try:
         preferences = await get_preferences()
@@ -154,6 +160,7 @@ async def resolve_linkedin_discovery_payload(
             if not effective_resume_id:
                 effective_resume_id = preferences.resume_id
             target_roles = list(preferences.target_roles or [])
+            target_skills = list(preferences.target_skills or [])
             if preferences.preferred_locations:
                 preferred_location = preferences.preferred_locations[0]
     except Exception:
@@ -163,6 +170,7 @@ async def resolve_linkedin_discovery_payload(
     return build_linkedin_discovery_payload(
         resume,
         target_roles=target_roles,
+        target_skills=target_skills,
         preferred_location=preferred_location,
         headless=headless,
         capture_screenshots=capture_screenshots,

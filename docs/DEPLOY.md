@@ -49,7 +49,10 @@
 
 ### Render notes
 
-- **Free/starter plans** spin down when idle; first request after sleep can be slow.
+- **Free/starter plans** spin down when idle; first request after sleep can be slow (30–90s).
+- **Keep-alive cron** (`career-os-keepalive` in `render.yaml`) pings `/health` every 10 minutes so scheduled scans and emails can run. Set `API_HEALTH_URL` on the cron job to your API URL, e.g. `https://career-os-pd9g.onrender.com/health`.
+- **Starter plan ($7/mo)** avoids spin-down; keep-alive is still recommended for scan reliability.
+- The **frontend wakes the API** on load at [career-os-two-chi.vercel.app](https://career-os-two-chi.vercel.app/) and disables Sign in / Continue until `/health` responds.
 - **Playwright/LinkedIn** runs in the container; LinkedIn session files are ephemeral unless you use persistent disk (optional upgrade).
 - **Redis/Celery** are off by default in `render.yaml`. Enable later with a Render Redis instance and set `REDIS_URL` + `REDIS_ENABLED=true`.
 - **WebSockets** work on Render web services — use `wss://` from the frontend.
@@ -134,7 +137,7 @@ Test login from the Vercel URL; check browser DevTools → Network for CORS erro
 | 404 on API root `/` | Use `/health`, `/docs`, or `/logs` (after redeploy) |
 
 After deploy, confirm `/health` includes `"logs_viewer": "/logs"`. If that field is missing, the new build is not live yet.
-| `Failed to fetch` | Wrong `VITE_API_BASE_URL`; Render service asleep |
+| `Failed to fetch` | Wrong `VITE_API_BASE_URL`; Render service asleep — wait for wake banner or redeploy with keep-alive cron |
 | WebSocket fails | Use `wss://` not `ws://`; same host as API |
 | Build fails on Render | Check Docker logs; Playwright install needs enough memory |
 | Vite still calls localhost | Rebuild Vercel after env change |

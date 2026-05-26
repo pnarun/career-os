@@ -304,6 +304,10 @@ def score_resume_against_job(
 
     raw_score = skill_pts + tech_pts + exp_pts + loc_pts + title_pts
     match_score = max(0, min(100, round(raw_score)))
+    # Keep jobs visible when at least one skill overlaps — user decides whether to apply.
+    if matched_skills:
+        floor = min(45, 10 + len(matched_skills) * 5)
+        match_score = max(match_score, floor)
 
     breakdown: MatchBreakdown = {
         "skill_overlap": round(skill_pts, 2),

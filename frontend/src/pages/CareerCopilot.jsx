@@ -10,6 +10,7 @@ import {
   Zap,
 } from "lucide-react"
 
+import { SlowLoadingFormHint, SlowLoadingPageCenter } from "@/components/SlowLoadingStatus"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
@@ -147,11 +148,7 @@ export function CareerCopilot() {
   }
 
   if (bootLoading) {
-    return (
-      <div className="flex min-h-[50vh] items-center justify-center">
-        <Loader2 className="size-8 animate-spin text-muted-foreground" />
-      </div>
-    )
+    return <SlowLoadingPageCenter active messageKey="copilot-boot" />
   }
 
   const ctx = overview?.context_summary
@@ -292,10 +289,7 @@ export function CareerCopilot() {
               ))
             )}
             {loading ? (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="size-4 animate-spin" />
-                Thinking…
-              </div>
+              <SlowLoadingFormHint active messageKey="copilot-chat" className="mx-1" />
             ) : null}
             <div ref={bottomRef} />
           </div>

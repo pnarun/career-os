@@ -24,7 +24,12 @@ class RealtimeConnectionManager:
         await websocket.accept()
         async with self._lock:
             self._connections[user_id].add(websocket)
-        logger.info("[REALTIME] user=%s connected (total=%d)", user_id, len(self._connections[user_id]))
+        logger.info(
+            "[REALTIME] user=%s connected (total=%d)",
+            user_id,
+            len(self._connections[user_id]),
+            extra={"user_id": user_id},
+        )
 
     async def disconnect(self, websocket: WebSocket, user_id: str) -> None:
         async with self._lock:

@@ -11,6 +11,7 @@ export function mapFeedJobToDisplay(job) {
     id: job.job_id,
     title: job.title,
     company: job.company,
+    company_tag: job.company_tag ?? "",
     location: job.location,
     description: job.description,
     apply_url: job.apply_url,
@@ -72,6 +73,9 @@ export async function getJobsFeed(filters = {}) {
   }
   if (filters.sort && filters.sort !== "default") {
     params.set("sort", filters.sort)
+  }
+  if (filters.company?.trim()) {
+    params.set("company", filters.company.trim())
   }
 
   const query = params.toString()

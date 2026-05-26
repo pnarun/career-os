@@ -14,6 +14,9 @@ import {
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { SlowLoadingFormHint } from "@/components/SlowLoadingStatus"
+import { WakeAwareButton } from "@/components/WakeAwareButton"
+import { useBackendWake } from "@/context/BackendWakeContext"
 import { cn } from "@/lib/utils"
 
 const FEATURES = [
@@ -127,8 +130,17 @@ const TITLE_ACCENT = {
 
 /** @param {{ onSignIn: () => void }} props */
 export function LandingPage({ onSignIn }) {
+  const { ready } = useBackendWake()
+
   return (
     <div className="landing-page">
+      {!ready ? (
+        <div className="border-b border-indigo-500/20 bg-indigo-500/5 px-4 py-3">
+          <div className="mx-auto max-w-3xl">
+            <SlowLoadingFormHint active messageKey="backend-wake" />
+          </div>
+        </div>
+      ) : null}
       <header className="landing-header sticky top-0 z-50 border-b backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
           <div className="flex items-center gap-2.5">
@@ -137,10 +149,10 @@ export function LandingPage({ onSignIn }) {
             </div>
             <span className="landing-text-gradient text-lg font-bold tracking-tight">Career OS</span>
           </div>
-          <Button onClick={onSignIn} size="sm" className="landing-btn-primary gap-1.5 shadow-md shadow-indigo-500/20">
+          <WakeAwareButton onClick={onSignIn} size="sm" className="landing-btn-primary gap-1.5 shadow-md shadow-indigo-500/20">
             Sign in
             <ChevronRight className="size-4" />
-          </Button>
+          </WakeAwareButton>
         </div>
       </header>
 
@@ -162,10 +174,10 @@ export function LandingPage({ onSignIn }) {
             getting hired.
           </p>
           <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
-            <Button size="lg" className="landing-btn-primary min-w-[180px] gap-2 shadow-lg shadow-violet-500/25" onClick={onSignIn}>
+            <WakeAwareButton size="lg" className="landing-btn-primary min-w-[180px] gap-2 shadow-lg shadow-violet-500/25" onClick={onSignIn}>
               Get started free
               <ChevronRight className="size-4" />
-            </Button>
+            </WakeAwareButton>
             <Button
               size="lg"
               variant="outline"
@@ -314,10 +326,10 @@ export function LandingPage({ onSignIn }) {
           <p className="landing-muted mx-auto mt-4 max-w-lg">
             Join Career OS and turn your job search into a system that works for you.
           </p>
-          <Button size="lg" className="landing-btn-primary mt-8 min-w-[200px] gap-2 shadow-lg shadow-violet-500/25" onClick={onSignIn}>
+          <WakeAwareButton size="lg" className="landing-btn-primary mt-8 min-w-[200px] gap-2 shadow-lg shadow-violet-500/25" onClick={onSignIn}>
             Sign in to get started
             <ChevronRight className="size-4" />
-          </Button>
+          </WakeAwareButton>
         </div>
       </section>
 
@@ -330,9 +342,9 @@ export function LandingPage({ onSignIn }) {
               career platform
             </span>
           </div>
-          <Button variant="ghost" size="sm" className="landing-btn-ghost" onClick={onSignIn}>
+          <WakeAwareButton variant="ghost" size="sm" className="landing-btn-ghost" onClick={onSignIn}>
             Sign in
-          </Button>
+          </WakeAwareButton>
         </div>
       </footer>
     </div>

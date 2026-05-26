@@ -5,7 +5,6 @@ import {
   BarChart3,
   Bell,
   Briefcase,
-  Loader2,
   MousePointerClick,
   Radar,
   RefreshCw,
@@ -17,6 +16,7 @@ import {
 
 import type { AppPage } from "@/components/layout/Sidebar"
 import { StatCard } from "@/components/dashboard/StatCard"
+import { SlowLoadingPageCenter } from "@/components/SlowLoadingStatus"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -109,11 +109,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
   const displayError = error ?? queryErrorMessage
 
   if (coreLoading && !core) {
-    return (
-      <div className="flex min-h-[50vh] items-center justify-center">
-        <Loader2 className="size-8 animate-spin text-muted-foreground" />
-      </div>
-    )
+    return <SlowLoadingPageCenter active messageKey="page-load" />
   }
 
   const apps = data?.applicationAnalytics

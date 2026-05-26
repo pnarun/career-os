@@ -20,9 +20,11 @@ import {
   SalaryBarChart,
   SkillDemandChart,
 } from "@/components/careerAnalytics/CareerAnalyticsCharts"
+import { SlowLoadingPageCenter } from "@/components/SlowLoadingStatus"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
+import { getPreferences } from "@/services/preferencesService"
 import { getCareerAnalyticsDashboard, scoreColor } from "@/services/careerAnalyticsService"
 
 function KpiCard({ icon: Icon, label, value, sub }) {
@@ -44,30 +46,38 @@ export function CareerAnalytics() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [roleOptions, setRoleOptions] = useState([])
+  const [selectedRole, setSelectedRole] = useState("")
+
+  useEffect(() => {
+    getPreferences()
+      .then((prefs) => {
+        const roles = prefs?.target_roles ?? []
+        setRoleOptions(roles)
+        if (roles.length && !selectedRole) setSelectedRole(roles[0])
+      })
+      .catch(() => {})
+  }, [])
 
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const dashboard = await getCareerAnalyticsDashboard()
+      const dashboard = await getCareerAnalyticsDashboard(selectedRole)
       setData(dashboard)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load analytics")
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [selectedRole])
 
   useEffect(() => {
     load()
   }, [load])
 
   if (loading) {
-    return (
-      <div className="flex min-h-[50vh] items-center justify-center">
-        <Loader2 className="size-8 animate-spin text-muted-foreground" />
-      </div>
-    )
+    return <SlowLoadingPageCenter active messageKey="page-load" />
   }
 
   const salary = data?.salary_insights
@@ -92,10 +102,25 @@ export function CareerAnalytics() {
             Market intelligence, salary insights, and career growth analytics
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={load}>
-          <RefreshCw className="mr-2 size-4" />
-          Refresh
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {roleOptions.length > 0 && (
+            <select
+              value={selectedRole}
+              onChange={(e) => setSelectedRole(e.target.value)}
+              className="h-9 rounded-lg border border-input bg-background px-3 text-sm"
+            >
+              {roleOptions.map((role) => (
+                <option key={role} value={role}>
+                  {role}
+                </option>
+              ))}
+            </select>
+          )}
+          <Button variant="outline" size="sm" onClick={load}>
+            <RefreshCw className="mr-2 size-4" />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {error ? (

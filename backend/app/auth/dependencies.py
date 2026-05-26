@@ -43,7 +43,7 @@ async def get_current_user(
             detail={"message": "Account is disabled"},
         )
 
-    set_request_user(user.id, user.workspace_id)
+    set_request_user(user.id, user.workspace_id, user.email)
     return CurrentUser(
         user_id=user.id,
         workspace_id=user.workspace_id,

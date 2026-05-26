@@ -224,6 +224,28 @@ async def fetch_public_jobs_async() -> PublicJobsFetchResult:
         linkedin_result,
     )
 
+    try:
+        from app.services.job_sources.company_careers_source import fetch_all_target_company_jobs
+        from app.services.user_preferences_service import get_preferences
+
+        prefs = await get_preferences()
+        if prefs and prefs.target_companies:
+            company_jobs = await fetch_all_target_company_jobs(
+                list(prefs.target_companies),
+                roles=list(prefs.target_roles or []),
+            )
+            if company_jobs:
+                pre_filter_jobs = merge_and_dedupe_pipeline_jobs(
+                    pre_filter_jobs, company_jobs
+                )
+                aggregation.total_after_dedupe = len(pre_filter_jobs)
+                logger.info(
+                    "[FETCH] Merged target company portal jobs count=%d",
+                    len(company_jobs),
+                )
+    except Exception:
+        logger.exception("[FETCH] Target company portal fetch failed (continuing)")
+
     filtered_jobs, rejected_count = filter_normalized_jobs(pre_filter_jobs)
 
     logger.info(

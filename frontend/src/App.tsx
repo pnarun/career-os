@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from "react"
-import { Loader2 } from "lucide-react"
+import { SlowLoadingPageCenter } from "@/components/SlowLoadingStatus"
 
 import type { AppPage } from "@/components/layout/Sidebar"
 import { useAuth } from "@/context/AuthContext"
@@ -32,11 +32,7 @@ const Settings = lazy(() => import("@/pages/Settings").then((m) => ({ default: m
 const Profile = lazy(() => import("@/pages/Profile").then((m) => ({ default: m.Profile })))
 
 function PageFallback() {
-  return (
-    <div className="flex min-h-[40vh] items-center justify-center">
-      <Loader2 className="size-8 animate-spin text-muted-foreground" />
-    </div>
-  )
+  return <SlowLoadingPageCenter active messageKey="page-load" />
 }
 
 function renderPage(page: AppPage) {
@@ -112,8 +108,8 @@ function App() {
 
   if (loading) {
     return (
-      <div className="flex min-h-svh items-center justify-center bg-background">
-        <Loader2 className="size-8 animate-spin text-muted-foreground" />
+      <div className="neon-app-shell flex min-h-svh items-center justify-center bg-background">
+        <SlowLoadingPageCenter active messageKey="session" />
       </div>
     )
   }

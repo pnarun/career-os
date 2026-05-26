@@ -1,6 +1,6 @@
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 from app.models.career_analytics import CareerAnalyticsDashboard
 from app.services.career_analytics.analytics_dashboard_service import build_analytics_dashboard
@@ -24,10 +24,12 @@ router = APIRouter(tags=["career-analytics"])
 
 
 @router.get("/career-analytics/dashboard", response_model=CareerAnalyticsDashboard)
-async def career_analytics_dashboard() -> CareerAnalyticsDashboard:
+async def career_analytics_dashboard(
+    role: str = Query(default="", description="Target role for role-specific analytics"),
+) -> CareerAnalyticsDashboard:
     """Full career intelligence dashboard."""
     try:
-        data = await build_analytics_dashboard()
+        data = await build_analytics_dashboard(target_role=role.strip() or None)
         return CareerAnalyticsDashboard(**data)
     except Exception as exc:
         logger.exception("Failed to build career analytics dashboard")

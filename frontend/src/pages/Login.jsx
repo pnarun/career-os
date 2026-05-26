@@ -2,6 +2,7 @@ import { useState } from "react"
 import { Briefcase, Loader2 } from "lucide-react"
 
 import { useAuth } from "@/context/AuthContext"
+import { SlowLoadingFormHint } from "@/components/SlowLoadingStatus"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 
@@ -63,6 +64,7 @@ export function Login({ onSwitchToRegister }) {
               />
             </div>
             {error ? <p className="text-sm text-destructive">{error}</p> : null}
+            <SlowLoadingFormHint active={busy} messageKey="login" />
             <Button type="submit" className="w-full" disabled={busy}>
               {busy ? <Loader2 className="size-4 animate-spin" /> : null}
               Sign in

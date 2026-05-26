@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { Loader2, Mic, Target, X } from "lucide-react"
 
 import { ReadinessGauge, TopicConfidenceBars } from "@/components/interviewPrep/InterviewPrepCharts"
+import { SlowLoadingFormHint } from "@/components/SlowLoadingStatus"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { getInterviewPrepOverview, jobToInterviewPayload, scoreColor } from "@/services/interviewAiService"
@@ -63,11 +64,14 @@ export function JobInterviewPrepModal({ job, open, onClose }) {
             Ethical prep only — practice before your interview, not during it.
           </p>
 
-          {loading && (
-            <div className="flex justify-center py-12">
-              <Loader2 className="size-8 animate-spin text-muted-foreground" />
-            </div>
-          )}
+          {loading ? (
+            <>
+              <div className="flex justify-center py-6">
+                <Loader2 className="size-7 animate-spin text-indigo-400" />
+              </div>
+              <SlowLoadingFormHint active messageKey="interview-questions" />
+            </>
+          ) : null}
 
           {error && <p className="text-sm text-destructive">{error}</p>}
 

@@ -12,6 +12,7 @@ import {
 
 import { useNotificationVersion } from "@/context/RealtimeContext"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { SlowLoadingPageCenter } from "@/components/SlowLoadingStatus"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import {
@@ -98,10 +99,7 @@ export function NotificationCenter({ onNavigate }) {
   const handleMarkRead = async (notificationId) => {
     try {
       await markNotificationRead(notificationId)
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n))
-      )
-      setUnreadCount((c) => Math.max(0, c - 1))
+      queryClient.invalidateQueries({ queryKey: ["notifications", "panel"] })
     } catch {
       /* ignore */
     }
@@ -110,11 +108,20 @@ export function NotificationCenter({ onNavigate }) {
   const handleMarkAllRead = async () => {
     try {
       await markAllNotificationsRead()
-      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
-      setUnreadCount(0)
+      queryClient.invalidateQueries({ queryKey: ["notifications", "panel"] })
     } catch {
       /* ignore */
     }
+  }
+
+  const handleViewAll = () => {
+    setOpen(false)
+    try {
+      sessionStorage.setItem("operationsHubTab", "notifications")
+    } catch {
+      /* ignore */
+    }
+    onNavigate?.("operations-hub")
   }
 
   return (
@@ -173,8 +180,8 @@ export function NotificationCenter({ onNavigate }) {
 
           <div className="max-h-96 overflow-y-auto">
             {loading ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="size-5 animate-spin text-muted-foreground" />
+              <div className="px-2 py-4">
+                <SlowLoadingPageCenter active messageKey="notifications" className="min-h-[120px]" />
               </div>
             ) : notifications.length === 0 ? (
               <p className="px-4 py-8 text-center text-sm text-muted-foreground">
@@ -237,10 +244,7 @@ export function NotificationCenter({ onNavigate }) {
                 variant="ghost"
                 size="sm"
                 className="w-full text-xs"
-                onClick={() => {
-                  setOpen(false)
-                  onNavigate("notifications")
-                }}
+                onClick={handleViewAll}
               >
                 View all notifications
               </Button>

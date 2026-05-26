@@ -1,6 +1,7 @@
 import { useEffect } from "react"
-import { Loader2, X } from "lucide-react"
+import { X } from "lucide-react"
 
+import { SlowLoadingPageCenter } from "@/components/SlowLoadingStatus"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
@@ -76,10 +77,7 @@ export function EmailPreviewModal({
 
         <div className="min-h-0 flex-1 overflow-y-auto bg-[#0f172a] p-4">
           {loading ? (
-            <div className="flex min-h-[240px] items-center justify-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="size-5 animate-spin" />
-              Generating preview…
-            </div>
+            <SlowLoadingPageCenter active messageKey="email-preview" className="min-h-[240px]" />
           ) : (
             <iframe
               title="Email preview"

@@ -17,8 +17,17 @@ class StructuredFormatter(logging.Formatter):
         self.service = service
 
     def format(self, record: logging.LogRecord) -> str:
+        from app.core.user_context import get_request_user_email
+
+        user_email = (
+            getattr(record, "user", None)
+            or getattr(record, "user_email", None)
+            or get_request_user_email()
+        )
+
         payload: dict[str, Any] = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
+            "user": user_email,
             "service": getattr(record, "service", self.service),
             "level": record.levelname,
             "logger": record.name,

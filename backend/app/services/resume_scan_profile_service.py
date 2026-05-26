@@ -60,7 +60,8 @@ def extract_scan_profile_from_resume(resume: ResumeDocument) -> dict[str, Any]:
         locations.append("Remote")
 
     return {
-        "target_roles": roles[:8],
+        "target_roles": roles[:10],
+        "target_skills": skills[:50],
         "years_experience": years,
         "preferred_locations": locations[:10],
         "primary_skills": skills[:25],

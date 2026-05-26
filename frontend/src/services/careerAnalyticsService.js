@@ -1,7 +1,8 @@
 import { apiFetch, getApiBaseUrl, parseErrorMessage } from "@/lib/apiClient"
 
-export async function getCareerAnalyticsDashboard() {
-  const response = await apiFetch(`/career-analytics/dashboard`)
+export async function getCareerAnalyticsDashboard(role = "") {
+  const params = role?.trim() ? `?role=${encodeURIComponent(role.trim())}` : ""
+  const response = await apiFetch(`/career-analytics/dashboard${params}`)
   if (!response.ok) throw new Error(await parseErrorMessage(response))
   return response.json()
 }
@@ -15,7 +16,7 @@ export function scoreColor(score) {
 
 export function formatSalary(value) {
   if (typeof value === "string") return value
-  if (typeof value === "number") return `$${value.toLocaleString()}`
+  if (typeof value === "number") return `₹${value.toLocaleString("en-IN")}`
   return "—"
 }
 

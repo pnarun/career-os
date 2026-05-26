@@ -9,6 +9,7 @@ import {
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { SlowLoadingFormHint } from "@/components/SlowLoadingStatus"
 import {
   Card,
   CardContent,
@@ -133,6 +134,7 @@ export function JobMatch() {
             )}
           </div>
 
+          <SlowLoadingFormHint active={isLoading} messageKey="job-match" />
           <Button onClick={onSubmit} disabled={isLoading || !jobDescription.trim()}>
             {isLoading ? (
               <>

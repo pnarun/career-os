@@ -14,8 +14,15 @@ from app.services.resume_service import get_all_resumes
 from app.services.user_preferences_service import get_preferences
 
 
-async def build_skill_demand_analytics() -> dict[str, Any]:
+async def build_skill_demand_analytics(target_role: str | None = None) -> dict[str, Any]:
     jobs = await get_latest_scan_jobs()
+    if target_role and target_role.strip():
+        needle = target_role.strip().lower()
+        jobs = [
+            j for j in jobs
+            if needle in (j.title or "").lower()
+            or needle in (j.description or "").lower()
+        ]
     preferences = await get_preferences()
     market_skills = collect_market_skills(jobs)
     total_jobs = len(jobs) or 1

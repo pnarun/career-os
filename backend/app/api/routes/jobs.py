@@ -101,6 +101,7 @@ async def get_jobs_feed(
     strong_matches_only: bool = False,
     remote_high_match: bool = False,
     easy_apply_high_match: bool = False,
+    company: str | None = None,
 ) -> UnifiedFeedResponse:
     """Return the unified multi-provider jobs feed from the latest scan."""
     provider_list = [p.strip() for p in providers.split(",")] if providers else None
@@ -115,6 +116,7 @@ async def get_jobs_feed(
             strong_matches_only=strong_matches_only,
             remote_high_match=remote_high_match,
             easy_apply_high_match=easy_apply_high_match,
+            company=company,
         )
     except JobServiceError as exc:
         logger.error("Failed to build unified jobs feed: %s", exc)
