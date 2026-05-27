@@ -1,5 +1,7 @@
 # Render free tier keep-alive (UptimeRobot)
 
+> **Canonical:** [deployment/uptime-robot-keepalive.md](./deployment/uptime-robot-keepalive.md)
+
 Career OS runs **APScheduler inside the FastAPI process** on Render. Scheduled scans, email digests, and reminders only run while that process is awake.
 
 ## Why Render sleeps

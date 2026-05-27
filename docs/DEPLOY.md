@@ -1,4 +1,6 @@
-# Deploy Career OS (Vercel + Render)
+# Deploy Career OS (Vercel + Render) — quick reference
+
+> **Canonical guide:** [deployment/render-vercel-deployment.md](./deployment/render-vercel-deployment.md) — part of the [documentation portal](./README.md).
 
 | Component | Platform | URL pattern |
 |-----------|----------|-------------|

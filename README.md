@@ -1,6 +1,21 @@
 # Career OS
 
+**By [ELVA Tech](https://elvatech.in)** · Part of **[Career Lens](https://career-lens.in)**
+
 Career OS is an AI-powered job search and career automation platform. It aggregates roles from multiple boards, scores them against your resume, runs scheduled scans, supports browser-based automation, and provides resume, interview, analytics, and copilot tooling from a single dashboard.
+
+## Documentation
+
+**Full engineering & product documentation:** **[docs/README.md](docs/README.md)**
+
+| Guide | Link |
+|-------|------|
+| Developer onboarding | [docs/onboarding/developer-onboarding.md](docs/onboarding/developer-onboarding.md) |
+| System architecture | [docs/architecture/system-overview.md](docs/architecture/system-overview.md) |
+| Deploy (Vercel + Render) | [docs/deployment/render-vercel-deployment.md](docs/deployment/render-vercel-deployment.md) |
+| API reference | [docs/api/api-reference.md](docs/api/api-reference.md) |
+| Troubleshooting | [docs/troubleshooting/common-issues.md](docs/troubleshooting/common-issues.md) |
+| Screenshots to capture | [docs/assets/README.md](docs/assets/README.md) |
 
 ## Features
 
@@ -153,7 +168,7 @@ See `infra/README.md` for staging/production compose and deployment notes.
 | Frontend | **Vercel** (`frontend/` root) | `frontend/.env.example`, `frontend/vercel.json` |
 | API | **Render** (Docker) | `render.yaml`, `backend/Dockerfile` |
 
-1. Deploy API on Render (Blueprint or Docker web service) — see **[docs/DEPLOY.md](docs/DEPLOY.md)**.
+1. Deploy API on Render (Blueprint or Docker web service) — see **[docs/deployment/render-vercel-deployment.md](docs/deployment/render-vercel-deployment.md)** (also [docs/DEPLOY.md](docs/DEPLOY.md)).
 2. Set `MONGO_URI`, `JWT_SECRET_KEY`, `FRONTEND_URL`, and other secrets on Render.
 3. Deploy frontend on Vercel with **Root Directory** = `frontend`.
 4. Set `VITE_API_BASE_URL` and `VITE_WS_BASE_URL` to your Render URL (`https://` / `wss://`).
