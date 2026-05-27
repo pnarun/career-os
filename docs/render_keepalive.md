@@ -32,10 +32,11 @@ Full dependency checks (MongoDB, Redis): `GET /system/status`
 | Field | Value |
 |--------|--------|
 | **Monitor type** | HTTP(s) |
-| **URL** | `https://YOUR-RENDER-API.onrender.com/health` |
+| **URL** | `https://YOUR-RENDER-API.onrender.com/health` (include `https://`) |
+| **HTTP method** | **HEAD** (UptimeRobot free tier default) or GET — both return **200** |
 | **Interval** | 5 minutes |
-| **Timeout** | 30 seconds |
-| **Expected** | HTTP 200, body contains `"status":"ok"` |
+| **Timeout** | 30–60 seconds |
+| **Expected** | HTTP **200** (not 405). Optional keyword: `"status":"ok"` |
 
 Example (replace with your URL):
 
@@ -101,6 +102,7 @@ UptimeRobot is still required when **no one** has the app open overnight.
 
 | Symptom | Check |
 |---------|--------|
+| Monitor **405** Method Not Allowed | Set monitor to **GET**; URL must be `https://.../health`. Redeploy API if using HEAD-only probes |
 | Monitor fails / timeout | Cold start: first ping after sleep can take 30–90s; increase UptimeRobot timeout |
 | `scheduler: stopped` | API failed during startup; read deploy logs |
 | Scans still missing | Schedule saved? `is_active` true? `frequency` = `every_6h`? |

@@ -5,8 +5,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Header, HTTPException, Query
-from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
+from fastapi import APIRouter, Header, HTTPException, Query, Request
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
 
 from app.api.routes.logs_view_html import render_logs_page
 from app.core.cache import cache_get, cache_set, cache_key
@@ -147,16 +147,22 @@ async def cron_scheduled_scans(
     return await run_overdue_scheduled_scans()
 
 
-@router.get("/health")
-async def health() -> dict[str, Any]:
+def _log_health_ping_if_debug() -> None:
+    if settings.ENVIRONMENT == "development" or settings.LOG_LEVEL.upper() == "DEBUG":
+        logger.debug("[HEALTH] keepalive ping")
+
+
+@router.api_route("/health", methods=["GET", "HEAD"])
+async def health(request: Request) -> dict[str, Any] | Response:
     """
-    UptimeRobot / keep-alive endpoint: no DB, no auth, no scans.
-    Use GET /system/status for full dependency checks.
+    UptimeRobot / keep-alive: GET returns JSON; HEAD returns 200 with empty body.
+    Free-tier UptimeRobot uses HEAD only. Use GET /system/status for dependency checks.
     """
+    _log_health_ping_if_debug()
+    if request.method == "HEAD":
+        return Response(status_code=200)
     return get_cached_health_payload(
         service=settings.APP_NAME,
-        version=settings.APP_VERSION,
-        environment=settings.ENVIRONMENT,
         ttl_seconds=settings.HEALTH_CACHE_SECONDS,
     )
 

@@ -10,8 +10,10 @@ export async function fetchBackendHealth(timeoutMs = 15000) {
   const base = getApiBaseUrl()
   if (!base) {
     return {
-      ok: import.meta.env.DEV,
-      data: { status: "ok", scheduler: "running" },
+      ok: false,
+      error: import.meta.env.DEV
+        ? "No API URL (dev defaults to localhost)"
+        : "VITE_API_BASE_URL is not set on Vercel",
     }
   }
 

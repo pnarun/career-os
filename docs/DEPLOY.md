@@ -129,6 +129,7 @@ Test login from the Vercel URL; check browser DevTools → Network for CORS erro
 - [ ] `JWT_SECRET_KEY` is not the default dev value
 - [ ] `AUTH_DEV_EXPOSE_OTP=false` in production
 - [ ] Atlas allows Render connections
+- [ ] `REDIS_ENABLED=false` on Render (unless you added a Render Redis instance)
 
 ---
 
@@ -139,11 +140,13 @@ Test login from the Vercel URL; check browser DevTools → Network for CORS erro
 | CORS error on login | Redeploy latest API (auto-allows `*.vercel.app` on Render); set `FRONTEND_URL=https://your-app.vercel.app` |
 | 404 on `/logs` | Render is on an old deploy — **Manual Deploy** latest `main` commit |
 | 404 on API root `/` | Use `/health`, `/docs`, or `/logs` (after redeploy) |
-
-After deploy, confirm `/health` includes `"logs_viewer": "/logs"`. If that field is missing, the new build is not live yet.
-| `Failed to fetch` | Wrong `VITE_API_BASE_URL`; Render service asleep — wait for wake banner or redeploy with keep-alive cron |
+| Logs: `Redis unavailable … localhost:6379` | Set **`REDIS_ENABLED=false`** on Render (or add a real `REDIS_URL`). The API runs without Redis for MVP. |
+| Login stuck on “Waking up servers” | Open `https://YOUR-API.onrender.com/health` in a tab; wait until JSON shows `"status":"ok"`. Set **`VITE_API_BASE_URL`** on Vercel to that API URL and redeploy frontend. |
+| `Failed to fetch` | Wrong `VITE_API_BASE_URL`; Render service asleep — UptimeRobot on `/health` every 5 min (see `docs/render_keepalive.md`) |
 | WebSocket fails | Use `wss://` not `ws://`; same host as API |
 | Build fails on Render | Check Docker logs; Playwright install needs enough memory |
 | Vite still calls localhost | Rebuild Vercel after env change |
+
+After deploy, confirm `/health` returns `"status":"ok"`. Optional: `/logs` viewer when the latest API build is live.
 
 See also `README.md` for local development.

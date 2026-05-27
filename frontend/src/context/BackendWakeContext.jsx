@@ -45,7 +45,7 @@ export function BackendWakeProvider({ children }) {
       setStatus("checking")
     }
     wakeBackend()
-    const ok = await waitForBackendReady({ maxAttempts: 45, intervalMs: 2000 })
+    const ok = await waitForBackendReady({ maxAttempts: 30, intervalMs: 2000 })
     if (ok) {
       wasOnlineRef.current = true
       setStatus("online")

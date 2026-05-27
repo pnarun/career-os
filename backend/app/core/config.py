@@ -2,6 +2,7 @@ import os
 from functools import lru_cache
 from typing import Literal
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 EnvironmentName = Literal["development", "staging", "production"]
@@ -95,6 +96,17 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
     )
+
+    @model_validator(mode="after")
+    def _disable_local_redis_on_cloud(self) -> "Settings":
+        """Render has no localhost Redis — avoid connect spam if env was mis-set."""
+        if not self.REDIS_ENABLED:
+            return self
+        url = (self.REDIS_URL or "").lower()
+        points_local = "localhost" in url or "127.0.0.1" in url
+        if points_local and (self.is_production or self.is_cloud_deploy):
+            object.__setattr__(self, "REDIS_ENABLED", False)
+        return self
 
     @property
     def is_production(self) -> bool:

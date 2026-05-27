@@ -47,7 +47,7 @@ function AuthBrand({ dark }) {
  */
 export function LandingAuthFlow({ open, onClose }) {
   const { login, register } = useAuth()
-  const { ready, waking } = useBackendWake()
+  const { ready, waking, failed, retryWake } = useBackendWake()
   const [step, setStep] = useState("email")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -273,6 +273,25 @@ export function LandingAuthFlow({ open, onClose }) {
       {step === "email" && waking ? (
         <div className="mt-4">
           <SlowLoadingFormHint active messageKey="backend-wake" tone="light" />
+        </div>
+      ) : null}
+
+      {step === "email" && failed && !waking ? (
+        <div className="mt-4 rounded-lg border border-amber-300/80 bg-amber-50 px-3 py-2.5 text-sm text-amber-950">
+          <p className="font-medium">Could not reach the API</p>
+          <p className="mt-1 text-xs text-amber-900/90">
+            Render cold starts can take up to a minute. Check{" "}
+            <code className="rounded bg-amber-100/80 px-1">VITE_API_BASE_URL</code> on Vercel.
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="landing-btn-outline mt-3"
+            onClick={() => void retryWake()}
+          >
+            Retry connection
+          </Button>
         </div>
       ) : null}
 

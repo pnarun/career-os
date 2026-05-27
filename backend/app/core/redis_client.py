@@ -13,13 +13,19 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 _client: Redis | None = None
+_connect_failed: bool = False
 
 
 def get_redis() -> Redis | None:
     """Return shared Redis client; None when Redis is unavailable."""
-    global _client
+    global _client, _connect_failed
+
     if not settings.REDIS_ENABLED:
         return None
+
+    if _connect_failed:
+        return None
+
     if _client is None:
         try:
             _client = redis.from_url(
@@ -32,31 +38,35 @@ def get_redis() -> Redis | None:
             _client.ping()
             logger.info("Redis connected", extra={"event": "redis_connected"})
         except Exception as exc:
+            _connect_failed = True
+            _client = None
             logger.warning(
                 "Redis unavailable: %s",
                 exc,
                 extra={"event": "redis_unavailable", "status": "degraded"},
             )
-            _client = None
     return _client
 
 
 def redis_health() -> dict[str, Any]:
+    if not settings.REDIS_ENABLED:
+        return {"status": "disabled"}
     client = get_redis()
     if client is None:
-        return {"status": "disabled" if not settings.REDIS_ENABLED else "down"}
+        return {"status": "down"}
     try:
-        latency_ms = client.ping()
-        return {"status": "ok", "latency_ms": 0 if latency_ms else 0}
+        client.ping()
+        return {"status": "ok", "latency_ms": 0}
     except Exception as exc:
         return {"status": "down", "error": str(exc)}
 
 
 def close_redis() -> None:
-    global _client
+    global _client, _connect_failed
     if _client is not None:
         try:
             _client.close()
         except Exception:
             pass
         _client = None
+    _connect_failed = False
