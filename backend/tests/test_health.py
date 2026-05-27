@@ -6,7 +6,7 @@ from httpx import ASGITransport, AsyncClient
 from app.main import app
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_health_get():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -18,7 +18,7 @@ async def test_health_get():
     assert data["scheduler"] in ("running", "stopped")
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_health_head():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -27,7 +27,7 @@ async def test_health_head():
     assert response.content == b""
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_system_status_endpoint():
     from unittest.mock import AsyncMock, patch
 

@@ -2,6 +2,37 @@
 
 Production issues encountered during Career OS development and deployment.
 
+## GitHub CI fails on every push
+
+### Backend job: SyntaxError in `conftest.py` (too many nested blocks)
+
+**Symptom:** `CI / backend` failed; `docker` skipped  
+**Cause:** Python 3.12+ limits nesting; 20+ `patch()` calls in one `with (...)` block  
+**Fix:** Use `ExitStack` in `tests/conftest.py` (fixed in repo)
+
+### Backend job: async tests skipped or failed
+
+**Symptom:** health/auth tests fail  
+**Cause:** `@pytest.mark.anyio` without anyio plugin; project uses `pytest-asyncio`  
+**Fix:** Use `@pytest.mark.asyncio` (see `pytest.ini` `asyncio_mode = auto`)
+
+### CI passes but Render does not deploy
+
+Render deploys from **GitHub webhooks**, not from GitHub Actions (unless you add a deploy workflow).
+
+**Check Render dashboard → your service → Settings:**
+
+| Setting | Should be |
+|---------|-----------|
+| Auto-Deploy | **On** |
+| Branch | `main` (same branch you push) |
+| Root directory | Repo root (Dockerfile `backend/Dockerfile`) |
+| Wait for CI | **Off** unless you want CI green before deploy |
+
+If **Wait for CI** is on, failed backend CI blocks Render until tests pass.
+
+**Re-link repo:** Settings → Connect repository → select `pnarun/career-os` and branch `main`.
+
 ## Render & deployment
 
 ### HEAD /health returns 405

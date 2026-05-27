@@ -49,6 +49,10 @@ class Settings(BaseSettings):
     RESEND_API_KEY: str = ""
     RESEND_FROM_EMAIL: str = ""
 
+    """Ops inbox: new signups, deploy alerts (also set in GitHub Secrets for CI)."""
+    ADMIN_NOTIFY_EMAIL: str = ""
+    ADMIN_NOTIFY_ENABLED: bool = True
+
     CLOUDINARY_CLOUD_NAME: str = ""
     CLOUDINARY_API_KEY: str = ""
     CLOUDINARY_API_SECRET: str = ""
@@ -107,6 +111,13 @@ class Settings(BaseSettings):
         if points_local and (self.is_production or self.is_cloud_deploy):
             object.__setattr__(self, "REDIS_ENABLED", False)
         return self
+
+    @property
+    def admin_notify_email(self) -> str:
+        explicit = (self.ADMIN_NOTIFY_EMAIL or "").strip()
+        if explicit:
+            return explicit
+        return (self.LEGACY_MIGRATION_EMAIL or "").strip()
 
     @property
     def is_production(self) -> bool:

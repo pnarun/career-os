@@ -6,6 +6,7 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, Header, HTTPException, Query
+from pydantic import BaseModel, Field
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
 
 from app.api.routes.logs_view_html import render_logs_page
@@ -136,6 +137,40 @@ def _queue_health() -> dict[str, Any]:
         return {"status": "degraded", "backlog": 0, "error": str(exc)}
 
 
+class DeployNotifyRequest(BaseModel):
+    component: str = Field(..., description="e.g. render-api, vercel-frontend, github-ci")
+    status: str = Field(default="success", description="success or failed")
+    url: str = ""
+    message: str = ""
+
+
+def _require_internal_secret(x_cron_secret: str) -> None:
+    secret = (settings.CRON_SECRET or "").strip()
+    if not secret or x_cron_secret != secret:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+
+@router.post("/internal/notify/deploy", include_in_schema=False)
+async def notify_deploy(
+    payload: DeployNotifyRequest,
+    x_cron_secret: str = Header(default="", alias="X-Cron-Secret"),
+) -> dict[str, Any]:
+    """
+    Webhook for deploy success (Render/Vercel/GitHub Actions).
+    Set ADMIN_NOTIFY_EMAIL on the API and call with header X-Cron-Secret.
+    """
+    _require_internal_secret(x_cron_secret)
+    from app.services.admin_notify_service import notify_deploy_event
+
+    sent = notify_deploy_event(
+        component=payload.component.strip(),
+        status=payload.status.strip(),
+        url=payload.url.strip(),
+        message=payload.message.strip(),
+    )
+    return {"status": "ok", "email_sent": sent}
+
+
 @router.post("/internal/cron/scheduled-scans", include_in_schema=False)
 async def cron_scheduled_scans(
     x_cron_secret: str = Header(default="", alias="X-Cron-Secret"),
@@ -144,9 +179,7 @@ async def cron_scheduled_scans(
     Trigger overdue scheduled scans (Render cron). Requires CRON_SECRET on the API
     and the same value in X-Cron-Secret.
     """
-    secret = (settings.CRON_SECRET or "").strip()
-    if not secret or x_cron_secret != secret:
-        raise HTTPException(status_code=403, detail="Forbidden")
+    _require_internal_secret(x_cron_secret)
 
     from app.services.scheduler_service import run_overdue_scheduled_scans
 

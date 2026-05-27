@@ -65,6 +65,7 @@
 ### Deployment & operations
 
 - [Render + Vercel deployment](./deployment/render-vercel-deployment.md)
+- [Health checks & admin email](./deployment/notifications-and-health.md)
 - [Environment variables](./deployment/environment-variables.md)
 - [UptimeRobot keep-alive](./deployment/uptime-robot-keepalive.md)
 - [Logging](./operations/logging.md)

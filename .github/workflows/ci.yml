@@ -29,7 +29,10 @@ jobs:
           ENVIRONMENT: development
           REDIS_ENABLED: "false"
           CELERY_ENABLED: "false"
+          QUEUE_SCANS_ENABLED: "false"
+          RATE_LIMIT_ENABLED: "false"
           MONGO_URI: mongodb://localhost:27017/career_os_test
+          JWT_SECRET_KEY: ci-test-secret-not-for-production
 
   frontend:
     runs-on: ubuntu-latest

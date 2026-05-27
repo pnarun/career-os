@@ -161,6 +161,19 @@ async def register_user(
 
         tokens = _build_tokens(user.id, workspace.id)
         await _store_refresh_token(user.id, tokens.refresh_token)
+
+        try:
+            from app.services.admin_notify_service import notify_new_user_registration
+
+            notify_new_user_registration(
+                email=user.email,
+                full_name=user.full_name or full_name,
+                user_id=user.id,
+                timezone=timezone,
+            )
+        except Exception:
+            logger.exception("Admin new-user email failed for user=%s", user.id)
+
         return AuthResponse(
             **tokens.model_dump(),
             user=UserPublic.from_document(user),

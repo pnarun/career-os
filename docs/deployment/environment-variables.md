@@ -55,6 +55,9 @@ Frontend and backend do **not** share secret values — they share **URLs** only
 | `GEMINI_API_KEY` | Google Gemini |
 | `RESEND_API_KEY` | Email delivery |
 | `RESEND_FROM_EMAIL` | Verified sender |
+| `ADMIN_NOTIFY_EMAIL` | Ops inbox (new users, deploy alerts) |
+| `ADMIN_NOTIFY_ENABLED` | `true` to send admin emails |
+| `CRON_SECRET` | Protects `/internal/cron/*` and `/internal/notify/deploy` |
 | `CLOUDINARY_CLOUD_NAME` | Resume storage |
 | `CLOUDINARY_API_KEY` | |
 | `CLOUDINARY_API_SECRET` | |

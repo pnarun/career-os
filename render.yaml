@@ -10,6 +10,8 @@ services:
     runtime: docker
     plan: starter
     region: singapore
+    autoDeploy: true
+    branch: main
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
     healthCheckPath: /health
@@ -51,6 +53,10 @@ services:
       - key: CLOUDINARY_API_KEY
         sync: false
       - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: ADMIN_NOTIFY_EMAIL
+        sync: false
+      - key: CRON_SECRET
         sync: false
   # Keep-alive: use UptimeRobot → GET /health every 5 min (see docs/render_keepalive.md).
   # Render Cron Jobs are optional paid add-ons; not required for MVP.
