@@ -34,6 +34,10 @@ NOTIFICATIONS_COLLECTION = "notifications"
 AUTOMATION_RUNS_COLLECTION = "automation_runs"
 HIGH_MATCH_THRESHOLD = 85
 
+def _utc_now_iso() -> str:
+    """Small shared timestamp helper (avoid NameError in scheduler catch-up)."""
+    return datetime.now(timezone.utc).isoformat()
+
 
 class NotificationServiceError(Exception):
     """Raised when notification operations fail."""
