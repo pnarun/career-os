@@ -119,26 +119,52 @@ export function SlowLoadingFormHint({
   messageKey = "generic",
   messages: messagesProp = undefined,
   className,
+  tone = "dark",
 }) {
   const messages = messagesProp ?? getLoadingMessages(messageKey)
   const { showSlow, message } = useSlowLoadingMessages(active, messages)
 
   if (!showSlow) return null
 
+  const light = tone === "light"
+
   return (
     <div
       className={cn(
-        "flex items-start gap-3 rounded-lg border border-indigo-500/25 bg-indigo-500/10 px-3 py-2.5",
+        "flex items-start gap-3 rounded-lg border px-3 py-2.5",
+        light
+          ? "border-indigo-300/60 bg-indigo-50"
+          : "border-indigo-500/25 bg-indigo-500/10",
         className
       )}
       role="status"
       aria-live="polite"
     >
-      <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin text-indigo-400" aria-hidden />
+      <Loader2
+        className={cn(
+          "mt-0.5 size-4 shrink-0 animate-spin",
+          light ? "text-indigo-600" : "text-indigo-400"
+        )}
+        aria-hidden
+      />
       <div className="min-w-0 text-left">
-        <p className="text-sm font-medium text-foreground">{message.title}</p>
+        <p
+          className={cn(
+            "text-sm font-medium",
+            light ? "text-slate-900" : "text-foreground"
+          )}
+        >
+          {message.title}
+        </p>
         {message.subtitle ? (
-          <p className="text-xs text-muted-foreground">{message.subtitle}</p>
+          <p
+            className={cn(
+              "text-xs",
+              light ? "text-slate-600" : "text-muted-foreground"
+            )}
+          >
+            {message.subtitle}
+          </p>
         ) : null}
       </div>
     </div>

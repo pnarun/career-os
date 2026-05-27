@@ -3,6 +3,7 @@ import { useState, type ReactNode } from "react"
 import { Sidebar, type AppPage } from "@/components/layout/Sidebar"
 import { TopNavbar } from "@/components/layout/TopNavbar"
 import { MobileBottomNav } from "@/components/layout/MobileBottomNav"
+import { SiteFooter } from "@/components/SiteFooter"
 
 type DashboardLayoutProps = {
   children: ReactNode
@@ -50,7 +51,10 @@ export function DashboardLayout({
           onMenuClick={() => setMobileNavOpen(true)}
         />
         <main className="relative z-0 flex-1 overflow-y-auto overscroll-contain p-4 pb-24 sm:p-6 lg:pb-6">
-          {children}
+          <div className="mx-auto flex min-h-full w-full max-w-6xl flex-col">
+            <div className="min-h-0 flex-1">{children}</div>
+            <SiteFooter className="mt-10 border-t border-indigo-500/15 pt-4 text-muted-foreground [&_a]:text-indigo-300 [&_a]:hover:text-indigo-200" compact />
+          </div>
         </main>
         <MobileBottomNav
           activePage={activePage}

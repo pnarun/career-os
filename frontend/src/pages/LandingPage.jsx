@@ -13,10 +13,10 @@ import {
   Zap,
 } from "lucide-react"
 
+import { useState } from "react"
+
+import { LandingAuthFlow } from "@/components/auth/LandingAuthFlow"
 import { Button } from "@/components/ui/button"
-import { SlowLoadingFormHint } from "@/components/SlowLoadingStatus"
-import { WakeAwareButton } from "@/components/WakeAwareButton"
-import { useBackendWake } from "@/context/BackendWakeContext"
 import { cn } from "@/lib/utils"
 
 const FEATURES = [
@@ -128,20 +128,26 @@ const TITLE_ACCENT = {
   indigo: "landing-heading-indigo",
 }
 
-/** @param {{ onSignIn: () => void }} props */
-export function LandingPage({ onSignIn }) {
-  const { ready } = useBackendWake()
+export function LandingPage() {
+  const [authOpen, setAuthOpen] = useState(false)
+
+  const openAuth = () => setAuthOpen(true)
 
   return (
-    <div className="landing-page">
-      {!ready ? (
-        <div className="border-b border-indigo-500/20 bg-indigo-500/5 px-4 py-3">
-          <div className="mx-auto max-w-3xl">
-            <SlowLoadingFormHint active messageKey="backend-wake" />
-          </div>
-        </div>
-      ) : null}
-      <header className="landing-header sticky top-0 z-50 border-b backdrop-blur-md">
+    <>
+    <div
+      className={cn(
+        "landing-page transition-[filter,transform] duration-300 ease-out",
+        authOpen && "landing-page--auth-open pointer-events-none select-none"
+      )}
+    >
+      <div
+        className={cn(
+          "transition-[filter,transform] duration-300 ease-out",
+          authOpen && "scale-[0.985] blur-[10px] brightness-[0.92]"
+        )}
+      >
+      <header className="landing-header fixed inset-x-0 top-0 z-50 border-b backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
           <div className="flex items-center gap-2.5">
             <div className="flex size-9 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-600 via-violet-600 to-orange-500 text-white shadow-md shadow-violet-500/25">
@@ -149,17 +155,20 @@ export function LandingPage({ onSignIn }) {
             </div>
             <span className="landing-text-gradient text-lg font-bold tracking-tight">Career OS</span>
           </div>
-          <WakeAwareButton onClick={onSignIn} size="sm" className="landing-btn-primary gap-1.5 shadow-md shadow-indigo-500/20">
+          <Button onClick={openAuth} size="sm" className="landing-btn-primary gap-1.5 shadow-md shadow-indigo-500/20">
             Sign in
             <ChevronRight className="size-4" />
-          </WakeAwareButton>
+          </Button>
         </div>
       </header>
 
+      {/* Spacer for fixed header (h-16) */}
+      <div className="h-16 shrink-0" aria-hidden />
+
       <section className="relative overflow-hidden px-4 pb-16 pt-12 sm:px-6 sm:pb-24 sm:pt-20">
         <div className="relative mx-auto max-w-4xl text-center">
-          <p className="landing-badge mb-4 inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-semibold uppercase tracking-wide">
-            <Zap className="size-3.5 text-orange-500" />
+          <p className="landing-badge mb-4 inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-indigo-900">
+            <Zap className="size-3.5 shrink-0 text-orange-600" aria-hidden />
             Your career, one platform
           </p>
           <h1 className="landing-hero-title text-4xl font-extrabold tracking-tight sm:text-5xl md:text-6xl">
@@ -174,10 +183,10 @@ export function LandingPage({ onSignIn }) {
             getting hired.
           </p>
           <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
-            <WakeAwareButton size="lg" className="landing-btn-primary min-w-[180px] gap-2 shadow-lg shadow-violet-500/25" onClick={onSignIn}>
+            <Button size="lg" className="landing-btn-primary min-w-[180px] gap-2 shadow-lg shadow-violet-500/25" onClick={openAuth}>
               Get started free
               <ChevronRight className="size-4" />
-            </WakeAwareButton>
+            </Button>
             <Button
               size="lg"
               variant="outline"
@@ -326,27 +335,45 @@ export function LandingPage({ onSignIn }) {
           <p className="landing-muted mx-auto mt-4 max-w-lg">
             Join Career OS and turn your job search into a system that works for you.
           </p>
-          <WakeAwareButton size="lg" className="landing-btn-primary mt-8 min-w-[200px] gap-2 shadow-lg shadow-violet-500/25" onClick={onSignIn}>
+          <Button size="lg" className="landing-btn-primary mt-8 min-w-[200px] gap-2 shadow-lg shadow-violet-500/25" onClick={openAuth}>
             Sign in to get started
             <ChevronRight className="size-4" />
-          </WakeAwareButton>
+          </Button>
         </div>
       </section>
 
       <footer className="landing-section-border border-t bg-white/50 px-4 py-8 sm:px-6">
-        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 sm:flex-row">
-          <div className="landing-muted flex items-center gap-2 text-sm">
-            <Briefcase className="size-4 text-violet-600" />
-            <span>
-              <span className="font-semibold text-violet-800">Career OS</span> — your AI-powered
-              career platform
-            </span>
-          </div>
-          <WakeAwareButton variant="ghost" size="sm" className="landing-btn-ghost" onClick={onSignIn}>
-            Sign in
-          </WakeAwareButton>
+        <div className="landing-muted mx-auto max-w-6xl border-t border-violet-200/70 pt-4 text-center text-xs sm:text-sm">
+          <span>
+            A{" "}
+            <a
+              href="https://career-lens.in"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-semibold underline-offset-4 hover:underline"
+            >
+              Career Lens
+            </a>{" "}
+            product
+          </span>
+          <span aria-hidden> &nbsp;•&nbsp; </span>
+          <span>
+            Powered by{" "}
+            <a
+              href="https://elvatech.in"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-semibold underline-offset-4 hover:underline"
+            >
+              ELVA Tech
+            </a>
+          </span>
         </div>
       </footer>
+      </div>
     </div>
+
+    <LandingAuthFlow open={authOpen} onClose={() => setAuthOpen(false)} />
+    </>
   )
 }

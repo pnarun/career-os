@@ -14,6 +14,9 @@ export function JobDescriptionModal({ job, open, onClose }) {
     <TopCenterDialog
       open={open}
       onClose={onClose}
+      size="lg"
+      placement="top"
+      backdrop="glass"
       title={job.title}
       description={job.company}
       aria-labelledby="job-description-title"

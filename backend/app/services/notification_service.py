@@ -1,6 +1,5 @@
 """In-app and email notification delivery."""
 
-import html
 import logging
 from collections import Counter
 from datetime import datetime, timedelta, timezone
@@ -23,11 +22,9 @@ from app.services.email_service import (
     EmailNotConfiguredError,
     EmailServiceError,
     ScanEmailSummary,
-    send_scan_results_email,
     _dispatch_resend,
-    _email_shell,
     _format_source_label,
-    _utc_now_iso,
+    build_no_match_email,
     build_opportunities_email,
 )
 
@@ -239,72 +236,6 @@ async def get_automation_analytics(limit: int = 10) -> dict[str, Any]:
     }
 
 
-def _build_digest_html(
-    jobs: list[JobDocument],
-    *,
-    remote_jobs: list[JobDocument],
-    easy_apply_jobs: list[JobDocument],
-    skills_to_learn: list[str],
-    application_summary: dict[str, int],
-    provider_stats: dict[str, int],
-    insights: list[str],
-) -> tuple[str, str, str]:
-    subject = "Career OS — Daily Career Digest"
-
-    top_rows = ""
-    for job in jobs[:5]:
-        top_rows += (
-            f"<li style='margin:8px 0;color:#e2e8f0;'>"
-            f"<strong>{html.escape(job.title)}</strong> at {html.escape(job.company)} "
-            f"— {job.match_percentage}% match"
-            f"</li>"
-        )
-
-    remote_count = len(remote_jobs)
-    easy_count = len(easy_apply_jobs)
-    skills_text = ", ".join(html.escape(s) for s in skills_to_learn[:5]) or "None identified"
-    provider_rows = "".join(
-        f"<li style='margin:4px 0;color:#cbd5e1;'>{html.escape(_format_source_label(k))}: {v}</li>"
-        for k, v in sorted(provider_stats.items(), key=lambda x: -x[1])[:6]
-    )
-    insight_rows = "".join(
-        f"<li style='margin:6px 0;color:#cbd5e1;'>{html.escape(i)}</li>" for i in insights[:4]
-    )
-
-    inner = f"""
-    <h1 style='color:#f8fafc;font-size:22px;margin:0 0 16px;'>Your Daily Career Digest</h1>
-    <h2 style='color:#94a3b8;font-size:14px;margin:24px 0 8px;'>Top Matches</h2>
-    <ul style='padding-left:20px;margin:0;'>{top_rows or "<li>No new matches today</li>"}</ul>
-    <h2 style='color:#94a3b8;font-size:14px;margin:24px 0 8px;'>Remote Opportunities</h2>
-    <p style='color:#e2e8f0;margin:0;'>{remote_count} remote roles in today's scan</p>
-    <h2 style='color:#94a3b8;font-size:14px;margin:24px 0 8px;'>Easy Apply Jobs</h2>
-    <p style='color:#e2e8f0;margin:0;'>{easy_count} easy-apply opportunities available</p>
-    <h2 style='color:#94a3b8;font-size:14px;margin:24px 0 8px;'>Recommended Skills to Learn</h2>
-    <p style='color:#e2e8f0;margin:0;'>{skills_text}</p>
-    <h2 style='color:#94a3b8;font-size:14px;margin:24px 0 8px;'>Application Summary</h2>
-    <ul style='padding-left:20px;margin:0;'>
-      <li style='color:#cbd5e1;'>Saved: {application_summary.get('saved', 0)}</li>
-      <li style='color:#cbd5e1;'>Applied: {application_summary.get('applied', 0)}</li>
-      <li style='color:#cbd5e1;'>Interviews: {application_summary.get('interviews', 0)}</li>
-      <li style='color:#cbd5e1;'>Offers: {application_summary.get('offers', 0)}</li>
-    </ul>
-    <h2 style='color:#94a3b8;font-size:14px;margin:24px 0 8px;'>Provider Statistics</h2>
-    <ul style='padding-left:20px;margin:0;'>{provider_rows or "<li>No provider data</li>"}</ul>
-    <h2 style='color:#94a3b8;font-size:14px;margin:24px 0 8px;'>Career Insights</h2>
-    <ul style='padding-left:20px;margin:0;'>{insight_rows or "<li>Keep scanning to unlock insights</li>"}</ul>
-    """
-
-    text_body = (
-        f"Career OS Daily Digest\n\n"
-        f"Top matches: {len(jobs)}\n"
-        f"Remote jobs: {remote_count}\n"
-        f"Easy apply: {easy_count}\n"
-        f"Skills to learn: {skills_text}\n"
-    )
-    html_body = _email_shell(inner, subject)
-    return subject, text_body, html_body
-
-
 async def send_daily_digest_email(
     preferences: UserPreferencesDocument,
     jobs: list[JobDocument],
@@ -317,37 +248,22 @@ async def send_daily_digest_email(
     insights: list[str],
     scan_summary: ScanEmailSummary | None = None,
 ) -> bool:
-    """Send enhanced daily digest; falls back to standard scan email if digest fails."""
+    """Send scheduled scan email with job cards (same format as manual scan emails)."""
     if not preferences.email_notifications:
         return False
 
-    try:
-        subject, text_body, html_body = _build_digest_html(
-            jobs,
-            remote_jobs=remote_jobs,
-            easy_apply_jobs=easy_apply_jobs,
-            skills_to_learn=skills_to_learn,
-            application_summary=application_summary,
-            provider_stats=provider_stats,
-            insights=insights,
-        )
-        from app.services.email_service import EmailBuildResult
+    _ = remote_jobs, easy_apply_jobs, skills_to_learn, application_summary, provider_stats, insights
 
-        built = EmailBuildResult(
-            subject=subject,
-            text_body=text_body,
-            html_body=html_body,
-            jobs_included=len(jobs),
-            email_type="daily_digest",
-        )
+    summary = scan_summary or ScanEmailSummary()
+    try:
+        if jobs:
+            built = build_opportunities_email(jobs[:15], summary, preferences.email)
+        else:
+            built = build_no_match_email(summary)
         _dispatch_resend(preferences.email, built)
         return True
     except (EmailNotConfiguredError, EmailServiceError) as exc:
-        logger.warning("[DIGEST_EMAIL_FALLBACK] %s", exc)
-        if jobs:
-            summary = scan_summary or ScanEmailSummary()
-            result = send_scan_results_email(preferences.email, jobs[:15], summary)
-            return result.sent
+        logger.warning("[DIGEST_EMAIL_FAILED] %s", exc)
         return False
 
 

@@ -205,14 +205,14 @@ export function Scans() {
   }
 
   const onSaveSchedule = async () => {
-    if (!preferenceId || !prefs) {
+    if (!preferenceId) {
       setError("Save user preferences in Settings first.")
       return
     }
     setBusy("schedule")
     try {
+      const everySixHours = schedule.frequency === "every_6h"
       await updatePreferences(preferenceId, {
-        ...prefs,
         scan_time: schedule.scan_time,
         timezone: schedule.timezone,
         frequency: schedule.frequency,
@@ -228,7 +228,7 @@ export function Scans() {
           .split(",")
           .map((l) => l.trim())
           .filter(Boolean),
-        use_default_six_hour_schedule: schedule.use_default_six_hour_schedule,
+        use_default_six_hour_schedule: everySixHours,
       })
       setMessage("Scheduled automation updated.")
       await load()
@@ -345,7 +345,14 @@ export function Scans() {
                 <label className="text-xs text-muted-foreground">Frequency</label>
                 <select
                   value={schedule.frequency}
-                  onChange={(e) => setSchedule((s) => ({ ...s, frequency: e.target.value }))}
+                  onChange={(e) => {
+                    const frequency = e.target.value
+                    setSchedule((s) => ({
+                      ...s,
+                      frequency,
+                      use_default_six_hour_schedule: frequency === "every_6h",
+                    }))
+                  }}
                   className="mt-1 flex h-9 w-full rounded-lg border border-input bg-background px-2 text-sm"
                 >
                   <option value="every_6h">Every 6 hours (00, 06, 12, 18)</option>

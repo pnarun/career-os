@@ -43,6 +43,9 @@ def _match_rule(path: str) -> tuple[str, int, int] | None:
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
+        if request.scope.get("type") == "websocket":
+            return await call_next(request)
+
         if not settings.RATE_LIMIT_ENABLED:
             return await call_next(request)
 

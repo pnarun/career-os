@@ -2,6 +2,7 @@ import { StrictMode } from "react"
 import { createRoot } from "react-dom/client"
 import { QueryClientProvider } from "@tanstack/react-query"
 
+import { AppErrorBoundary } from "@/components/AppErrorBoundary"
 import { AuthProvider } from "@/context/AuthContext"
 import { BackendWakeProvider } from "@/context/BackendWakeContext"
 import { RealtimeProvider } from "@/context/RealtimeContext"
@@ -19,14 +20,16 @@ if ("serviceWorker" in navigator && import.meta.env.PROD) {
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <BackendWakeProvider>
-        <AuthProvider>
-          <RealtimeProvider>
-            <App />
-          </RealtimeProvider>
-        </AuthProvider>
-      </BackendWakeProvider>
-    </QueryClientProvider>
+    <AppErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <BackendWakeProvider>
+          <AuthProvider>
+            <RealtimeProvider>
+              <App />
+            </RealtimeProvider>
+          </AuthProvider>
+        </BackendWakeProvider>
+      </QueryClientProvider>
+    </AppErrorBoundary>
   </StrictMode>
 )

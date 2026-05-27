@@ -1,6 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react"
 
-import { getAccessToken, getRefreshToken } from "@/lib/apiClient"
+import { getRefreshToken } from "@/lib/apiClient"
+import {
+  clearSessionBootstrap,
+  resolveSession,
+  setSessionBootstrapUser,
+} from "@/lib/authSessionBootstrap"
 import { clearNewUserRegistration, markNewUserRegistration } from "@/lib/newUserOnboarding"
 import { markTourPendingForLogin } from "@/lib/platformTour"
 import * as authService from "@/services/authService"
@@ -12,20 +17,9 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
 
   const loadSession = useCallback(async () => {
-    const token = getAccessToken()
-    if (!token) {
-      setUser(null)
-      setLoading(false)
-      return
-    }
-    try {
-      const me = await authService.fetchMe()
-      setUser(me)
-    } catch {
-      setUser(null)
-    } finally {
-      setLoading(false)
-    }
+    const me = await resolveSession()
+    setUser(me)
+    setLoading(false)
   }, [])
 
   useEffect(() => {
@@ -36,6 +30,7 @@ export function AuthProvider({ children }) {
     const data = await authService.login(credentials)
     clearNewUserRegistration()
     markTourPendingForLogin()
+    setSessionBootstrapUser(data.user)
     setUser(data.user)
     return data
   }, [])
@@ -44,12 +39,14 @@ export function AuthProvider({ children }) {
     const data = await authService.register(payload)
     markNewUserRegistration()
     markTourPendingForLogin()
+    setSessionBootstrapUser(data.user)
     setUser(data.user)
     return data
   }, [])
 
   const logout = useCallback(async () => {
     await authService.logout(getRefreshToken())
+    clearSessionBootstrap()
     setUser(null)
   }, [])
 

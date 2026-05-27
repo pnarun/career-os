@@ -194,8 +194,8 @@ export function AuthPage({ onBack }) {
           <CardDescription>{descriptions[step]}</CardDescription>
         </CardHeader>
         <CardContent>
-          {!ready ? (
-            <div className="mb-4">
+          {step === "email" && !ready ? (
+            <div className="mb-4 rounded-lg border border-indigo-500/25 bg-indigo-500/10 px-3 py-2">
               <SlowLoadingFormHint active messageKey="backend-wake" />
             </div>
           ) : null}
@@ -268,10 +268,10 @@ export function AuthPage({ onBack }) {
               </div>
               {error ? <p className="text-sm text-destructive">{error}</p> : null}
               <SlowLoadingFormHint active={busy} messageKey={busyAction || "login"} />
-              <WakeAwareButton type="submit" className="w-full" disabled={busy}>
+              <Button type="submit" className="w-full" disabled={busy}>
                 {busy ? <Loader2 className="size-4 animate-spin" /> : null}
                 Sign in
-              </WakeAwareButton>
+              </Button>
             </form>
           ) : null}
 
@@ -302,10 +302,10 @@ export function AuthPage({ onBack }) {
               </div>
               {error ? <p className="text-sm text-destructive">{error}</p> : null}
               <SlowLoadingFormHint active={busy} messageKey={busyAction || "register"} />
-              <WakeAwareButton type="submit" className="w-full" disabled={busy}>
+              <Button type="submit" className="w-full" disabled={busy}>
                 {busy ? <Loader2 className="size-4 animate-spin" /> : null}
                 Get started
-              </WakeAwareButton>
+              </Button>
             </form>
           ) : null}
 
@@ -359,9 +359,9 @@ export function AuthPage({ onBack }) {
                 active={busy}
                 messageKey={busyAction === "reset-confirm" ? "reset-confirm" : "reset-send"}
               />
-              <WakeAwareButton type="submit" className="w-full" disabled={busy || !otpSent}>
+              <Button type="submit" className="w-full" disabled={busy || !otpSent}>
                 Update password & sign in
-              </WakeAwareButton>
+              </Button>
             </form>
           ) : null}
         </CardContent>

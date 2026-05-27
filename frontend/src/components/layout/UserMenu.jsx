@@ -4,6 +4,7 @@ import { ChevronDown, LogOut, User } from "lucide-react"
 import { useAuth } from "@/context/AuthContext"
 import { useResumeOnboarding } from "@/context/ResumeOnboardingContext"
 import { Button } from "@/components/ui/button"
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog"
 import { cn } from "@/lib/utils"
 
 function initials(name, email) {
@@ -19,7 +20,19 @@ export function UserMenu({ onNavigate }) {
   const { user, logout } = useAuth()
   const { gateActive } = useResumeOnboarding()
   const [open, setOpen] = useState(false)
+  const [confirmSignOut, setConfirmSignOut] = useState(false)
+  const [signingOut, setSigningOut] = useState(false)
   const menuRef = useRef(null)
+
+  const handleConfirmSignOut = async () => {
+    setSigningOut(true)
+    try {
+      await logout()
+      setConfirmSignOut(false)
+    } finally {
+      setSigningOut(false)
+    }
+  }
 
   useEffect(() => {
     if (!open) return undefined
@@ -103,7 +116,7 @@ export function UserMenu({ onNavigate }) {
               className="mt-1 w-full justify-start gap-2"
               onClick={() => {
                 setOpen(false)
-                logout()
+                setConfirmSignOut(true)
               }}
             >
               <LogOut className="size-4" />
@@ -111,6 +124,18 @@ export function UserMenu({ onNavigate }) {
             </Button>
           </div>
       ) : null}
+
+      <ConfirmDialog
+        open={confirmSignOut}
+        onClose={() => setConfirmSignOut(false)}
+        onConfirm={handleConfirmSignOut}
+        title="Sign out?"
+        message="You will need to sign in again to access your jobs, scans, and saved preferences."
+        confirmLabel={signingOut ? "Signing out…" : "Sign out"}
+        cancelLabel="Cancel"
+        confirmVariant="destructive"
+        loading={signingOut}
+      />
     </div>
   )
 }

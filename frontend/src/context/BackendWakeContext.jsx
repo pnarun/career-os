@@ -1,19 +1,63 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react"
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
 
-import { pingBackendHealth, waitForBackendReady, wakeBackend } from "@/services/backendHealthService"
+import { fetchBackendHealth, waitForBackendReady, wakeBackend } from "@/services/backendHealthService"
 
 const BackendWakeContext = createContext(null)
 
-const KEEPALIVE_MS = 12 * 60 * 1000
+/** Align with UptimeRobot 5-minute interval */
+const KEEPALIVE_MS = 5 * 60 * 1000
+
+/**
+ * @typedef {'checking' | 'online' | 'reconnecting' | 'sleeping' | 'error'} BackendConnectionStatus
+ */
 
 export function BackendWakeProvider({ children }) {
+  /** @type {[BackendConnectionStatus, Function]} */
   const [status, setStatus] = useState("checking")
+  const [health, setHealth] = useState(null)
+  const wasOnlineRef = useRef(false)
+
+  const applyHealthResult = useCallback((result) => {
+    if (!result.ok) {
+      setHealth(null)
+      if (wasOnlineRef.current) {
+        setStatus("sleeping")
+      } else {
+        setStatus("error")
+      }
+      return false
+    }
+    wasOnlineRef.current = true
+    setHealth(result.data ?? null)
+    setStatus("online")
+    return true
+  }, [])
+
+  const ping = useCallback(async () => {
+    const result = await fetchBackendHealth(12000)
+    return applyHealthResult(result)
+  }, [applyHealthResult])
 
   const ensureReady = useCallback(async () => {
-    setStatus("checking")
+    if (wasOnlineRef.current) {
+      setStatus("reconnecting")
+    } else {
+      setStatus("checking")
+    }
     wakeBackend()
     const ok = await waitForBackendReady({ maxAttempts: 45, intervalMs: 2000 })
-    setStatus(ok ? "ready" : "error")
+    if (ok) {
+      wasOnlineRef.current = true
+      setStatus("online")
+      const result = await fetchBackendHealth(12000)
+      if (result.ok) {
+        setHealth(result.data ?? null)
+      }
+    } else if (wasOnlineRef.current) {
+      setStatus("sleeping")
+    } else {
+      setStatus("error")
+    }
     return ok
   }, [])
 
@@ -22,22 +66,26 @@ export function BackendWakeProvider({ children }) {
   }, [ensureReady])
 
   useEffect(() => {
-    if (status !== "ready") return undefined
+    if (status !== "online" && status !== "sleeping") return undefined
     const timer = window.setInterval(() => {
-      void pingBackendHealth(12000)
+      void ping()
     }, KEEPALIVE_MS)
     return () => window.clearInterval(timer)
-  }, [status])
+  }, [status, ping])
 
   const value = useMemo(
     () => ({
       status,
-      ready: status === "ready",
-      waking: status === "checking",
+      health,
+      ready: status === "online",
+      online: status === "online",
+      waking: status === "checking" || status === "reconnecting",
+      sleeping: status === "sleeping",
       failed: status === "error",
       retryWake: ensureReady,
+      ping,
     }),
-    [status, ensureReady]
+    [status, health, ensureReady, ping]
   )
 
   return (
@@ -49,11 +97,15 @@ export function useBackendWake() {
   const ctx = useContext(BackendWakeContext)
   if (!ctx) {
     return {
-      status: "ready",
+      status: "online",
+      health: null,
       ready: true,
+      online: true,
       waking: false,
+      sleeping: false,
       failed: false,
       retryWake: async () => true,
+      ping: async () => true,
     }
   }
   return ctx

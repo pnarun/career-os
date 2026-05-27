@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useState } from "react"
 import { SlowLoadingPageCenter } from "@/components/SlowLoadingStatus"
 
 import type { AppPage } from "@/components/layout/Sidebar"
+import { clearSavedPage, readSavedPage, saveActivePage } from "@/lib/appNavigation"
 import { useAuth } from "@/context/AuthContext"
 import { ResumeOnboardingProvider, useResumeOnboarding } from "@/context/ResumeOnboardingContext"
 import { DashboardLayout } from "@/layouts/DashboardLayout"
@@ -9,7 +10,6 @@ import { PlatformTour } from "@/components/PlatformTour"
 import { ResumeOnboardingModal } from "@/components/ResumeOnboardingModal"
 import { RealtimeToastHost } from "@/components/RealtimeToastHost"
 import { PwaInstallPrompt } from "@/components/PwaInstallPrompt"
-import { AuthPage } from "@/pages/AuthPage"
 import { LandingPage } from "@/pages/LandingPage"
 
 const DashboardPage = lazy(() =>
@@ -59,13 +59,21 @@ function renderPage(page: AppPage) {
 }
 
 function AppShell() {
-  const [page, setPage] = useState<AppPage>("dashboard")
+  const [page, setPage] = useState<AppPage>(() => readSavedPage())
   const { gateActive, isPageAllowed } = useResumeOnboarding()
+
+  useEffect(() => {
+    const { pathname } = window.location
+    if (pathname && pathname !== "/") {
+      window.history.replaceState(null, "", "/")
+    }
+  }, [])
 
   const handleNavigate = useCallback(
     (next: AppPage) => {
       if (!isPageAllowed(next)) return
       setPage(next)
+      saveActivePage(next)
     },
     [isPageAllowed]
   )
@@ -73,6 +81,7 @@ function AppShell() {
   useEffect(() => {
     if (gateActive && page !== "resume-hub") {
       setPage("resume-hub")
+      saveActivePage("resume-hub")
     }
   }, [gateActive, page])
 
@@ -95,18 +104,18 @@ function AppShell() {
 
 function App() {
   const { isAuthenticated, loading } = useAuth()
-  const [showAuth, setShowAuth] = useState(false)
 
   useEffect(() => {
     if (loading || isAuthenticated) {
       document.documentElement.classList.remove("public-scroll")
       return undefined
     }
+    clearSavedPage()
     document.documentElement.classList.add("public-scroll")
     return () => document.documentElement.classList.remove("public-scroll")
   }, [loading, isAuthenticated])
 
-  if (loading) {
+  if (loading && !isAuthenticated) {
     return (
       <div className="neon-app-shell flex min-h-svh items-center justify-center bg-background">
         <SlowLoadingPageCenter active messageKey="session" />
@@ -122,11 +131,7 @@ function App() {
     )
   }
 
-  if (showAuth) {
-    return <AuthPage onBack={() => setShowAuth(false)} />
-  }
-
-  return <LandingPage onSignIn={() => setShowAuth(true)} />
+  return <LandingPage />
 }
 
 export default App

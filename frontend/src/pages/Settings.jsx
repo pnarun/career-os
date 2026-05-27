@@ -224,7 +224,7 @@ export function Settings() {
         const saved = await savePreferences(payload)
         setPreferenceId(saved.id)
       }
-      setMessage("Preferences saved.")
+      setMessage("Preferences saved to your account.")
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save")
     } finally {

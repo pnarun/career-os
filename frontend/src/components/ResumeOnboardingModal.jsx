@@ -16,6 +16,9 @@ export function ResumeOnboardingModal({ onNavigate }) {
     <TopCenterDialog
       open={showModal}
       onClose={handleOk}
+      size="md"
+      placement="top"
+      backdrop="glass"
       aria-labelledby="resume-onboarding-title"
       title={
         <span className="flex items-center gap-3">

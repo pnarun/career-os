@@ -190,7 +190,41 @@ def _quality_badge_color(score: int) -> str:
     return "#ef4444"
 
 
+def _portal_url() -> str:
+    url = (settings.FRONTEND_URL or "").strip().rstrip("/")
+    if url:
+        return url
+    return "https://career-os-two-chi.vercel.app"
+
+
+def _email_footer_plain() -> str:
+    return (
+        f"\n\nOpen Career OS: {_portal_url()}\n\n"
+        "This email is not monitored. Please do not reply to this email.\n"
+        "— Career OS"
+    )
+
+
+def _build_portal_cta_html() -> str:
+    url = html.escape(_portal_url())
+    return f"""
+          <tr>
+            <td style="padding:28px 0 8px;text-align:center;">
+              <a href="{url}" style="display:inline-block;padding:12px 28px;
+                background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#ffffff;
+                text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">
+                Open Career OS portal
+              </a>
+              <p style="margin:10px 0 0;font-size:12px;color:#64748b;line-height:1.5;">
+                Sign in to view all matches, track applications, and manage your scans
+              </p>
+            </td>
+          </tr>
+    """
+
+
 def _email_shell(inner_content: str, title: str) -> str:
+    portal_cta = _build_portal_cta_html()
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -221,8 +255,12 @@ def _email_shell(inner_content: str, title: str) -> str:
             </td>
           </tr>
           {inner_content}
+          {portal_cta}
           <tr>
-            <td style="padding-top:24px;border-top:1px solid #334155;text-align:center;">
+            <td style="padding-top:20px;border-top:1px solid #334155;text-align:center;">
+              <p style="margin:0 0 8px;font-size:11px;color:#64748b;line-height:1.6;">
+                This email is not monitored. Please do not reply to this email.
+              </p>
               <p style="margin:0;font-size:11px;color:#475569;line-height:1.6;">
                 Career OS · Intelligent job discovery &amp; matching
               </p>
@@ -320,7 +358,7 @@ def build_opportunities_email(
         f"Scan: {scan_label}\nScan ID: {scan_id or 'n/a'}\n\n"
         + "\n".join(text_lines)
         + overflow_line
-        + "\n— Career OS"
+        + _email_footer_plain()
     )
 
     analytics_block = _build_email_analytics_html(scan_summary.analytics)
@@ -385,12 +423,12 @@ def build_no_match_email(scan_summary: ScanEmailSummary) -> EmailBuildResult:
 
     text_body = (
         f"{SUBJECT_NO_MATCH}\n\n"
-        "Career Lens Daily Scan Summary\n\n"
+        "Career OS Daily Scan Summary\n\n"
         f"{platform_text}\n\n"
-        "No strong matches were found today, but Career Lens continues scanning "
-        "India and remote engineering opportunities intelligently for you.\n\n"
-        f"Scan: {scan_label}\n"
-        "— Career Lens"
+        "No strong matches were found today, but Career OS continues scanning "
+        "opportunities intelligently for you.\n\n"
+        f"Scan: {scan_label}"
+        + _email_footer_plain()
     )
 
     analytics_block = _build_email_analytics_html(analytics)

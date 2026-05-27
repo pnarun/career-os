@@ -12,6 +12,12 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["realtime"])
 
 
+async def _reject_websocket(websocket: WebSocket, code: int, reason: str) -> None:
+    """Accept then close — closing before accept makes uvicorn log HTTP 403."""
+    await websocket.accept()
+    await websocket.close(code=code, reason=reason)
+
+
 @router.websocket("/ws/realtime")
 async def realtime_websocket(
     websocket: WebSocket,
@@ -19,17 +25,24 @@ async def realtime_websocket(
 ) -> None:
     """Authenticated WebSocket for user-scoped real-time events."""
     if not token:
-        await websocket.close(code=4401, reason="Missing token")
+        logger.warning("[REALTIME] connection rejected: missing token")
+        await _reject_websocket(websocket, 4401, "Missing token")
         return
 
     try:
         user_id = verify_access_token(token)
         user = await get_user_by_id(user_id)
         if not user.is_active:
-            await websocket.close(code=4403, reason="Account disabled")
+            logger.warning("[REALTIME] connection rejected: inactive user=%s", user_id)
+            await _reject_websocket(websocket, 4403, "Account disabled")
             return
-    except (ValueError, UserNotFoundError):
-        await websocket.close(code=4401, reason="Invalid token")
+    except ValueError as exc:
+        logger.warning("[REALTIME] connection rejected: invalid token (%s)", exc)
+        await _reject_websocket(websocket, 4401, "Invalid or expired token")
+        return
+    except UserNotFoundError:
+        logger.warning("[REALTIME] connection rejected: user not found")
+        await _reject_websocket(websocket, 4401, "Invalid token")
         return
 
     set_request_user(user.id, user.workspace_id, user.email)

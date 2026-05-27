@@ -5,11 +5,9 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { useBackendWake } from "@/context/BackendWakeContext"
 
-const WAKE_HINT =
-  "Our API is waking up from sleep (Render cold start). This usually takes 30–90 seconds on first visit. Please wait…"
+const WAKE_HINT = "API waking up"
 
-const WAKE_FAILED_HINT =
-  "Could not reach the API. Click to retry waking the server, or try again in a minute."
+const WAKE_FAILED_HINT = "Retry wake"
 
 /**
  * CTA button disabled until backend /health is ready. Hover explains why.
@@ -19,6 +17,8 @@ export function WakeAwareButton({
   disabled = false,
   className,
   showWakeSpinner = true,
+  hideTooltip = false,
+  tooltipSide = "right",
   onClick,
   ...props
 }) {
@@ -49,10 +49,10 @@ export function WakeAwareButton({
     </Button>
   )
 
-  if (!hint) return button
+  if (!hint || hideTooltip) return button
 
   return (
-    <ActionTooltip label={hint} side="top">
+    <ActionTooltip label={hint} side={tooltipSide}>
       <span
         className={cn(
           "inline-flex",

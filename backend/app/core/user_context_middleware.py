@@ -15,6 +15,10 @@ class UserContextMiddleware(BaseHTTPMiddleware):
     """Set request-scoped user (id, workspace, email) from Bearer JWT when present."""
 
     async def dispatch(self, request: Request, call_next) -> Response:
+        # BaseHTTPMiddleware breaks WebSocket upgrades (403). Auth is handled in realtime_router.
+        if request.scope.get("type") == "websocket":
+            return await call_next(request)
+
         auth = request.headers.get("Authorization", "")
         if auth.lower().startswith("bearer "):
             token = auth[7:].strip()

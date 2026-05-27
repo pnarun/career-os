@@ -27,6 +27,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import { isDevBuild } from "@/lib/env"
 import { cn } from "@/lib/utils"
 import { fetchHistoricalJobs } from "@/services/jobDebugService"
 import { DebugSummaryPanel } from "@/components/DebugSummaryPanel"
@@ -572,16 +573,18 @@ export function Jobs() {
           </p>
         </div>
         <div className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center xl:w-auto xl:justify-end">
-          <label className="flex h-9 cursor-pointer items-center gap-2 rounded-lg border border-input bg-background px-3 text-sm">
-            <input
-              type="checkbox"
-              checked={historicalMode}
-              onChange={(e) => onHistoricalToggle(e.target.checked)}
-              className="size-4 rounded border-border"
-            />
-            <History className="size-4 text-muted-foreground" />
-            <span className="whitespace-nowrap">Historical Debug Mode</span>
-          </label>
+          {isDevBuild ? (
+            <label className="flex h-9 cursor-pointer items-center gap-2 rounded-lg border border-input bg-background px-3 text-sm">
+              <input
+                type="checkbox"
+                checked={historicalMode}
+                onChange={(e) => onHistoricalToggle(e.target.checked)}
+                className="size-4 rounded border-border"
+              />
+              <History className="size-4 text-muted-foreground" />
+              <span className="whitespace-nowrap">Historical Debug Mode</span>
+            </label>
+          ) : null}
 
           <select
             id="location-filter"
@@ -891,18 +894,20 @@ export function Jobs() {
         open={Boolean(descriptionJob)}
         onClose={() => setDescriptionJob(null)}
       />
-      <DebugSummaryPanel
-        historicalMode={historicalMode}
-        displayJobsCount={displayJobs.length}
-        filteredJobsCount={filteredJobs.length}
-        locationFilter={locationFilter}
-        qualitySummary={qualitySummary}
-        locationSummary={locationSummary}
-        sourceSummary={sourceSummary}
-        scanSummary={scanSummary}
-        resolvedScanSummary={resolvedScanSummary}
-        feedMeta={feedMeta}
-      />
+      {isDevBuild ? (
+        <DebugSummaryPanel
+          historicalMode={historicalMode}
+          displayJobsCount={displayJobs.length}
+          filteredJobsCount={filteredJobs.length}
+          locationFilter={locationFilter}
+          qualitySummary={qualitySummary}
+          locationSummary={locationSummary}
+          sourceSummary={sourceSummary}
+          scanSummary={scanSummary}
+          resolvedScanSummary={resolvedScanSummary}
+          feedMeta={feedMeta}
+        />
+      ) : null}
       <JobDetailsModal
         job={selectedJob}
         open={Boolean(selectedJob)}

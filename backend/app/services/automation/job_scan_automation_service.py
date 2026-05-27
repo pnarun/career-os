@@ -147,7 +147,11 @@ async def run_daily_job_scan_automation(preference_id: str) -> None:
         from app.services.career_insight_service import get_top_missing_skills
         skills_to_learn = get_top_missing_skills(all_jobs)
 
-        if preferences.email_notifications and preferences.digest_frequency == "daily":
+        should_email = preferences.email_notifications and (
+            preferences.auto_email_on_scan
+            or (preferences.digest_frequency or "").lower() == "daily"
+        )
+        if should_email:
             digest_sent = await send_daily_digest_email(
                 preferences,
                 qualified[:15] or all_jobs[:15],

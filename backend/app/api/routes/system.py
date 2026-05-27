@@ -5,11 +5,12 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Header, HTTPException, Query
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 
 from app.api.routes.logs_view_html import render_logs_page
 from app.core.cache import cache_get, cache_set, cache_key
+from app.core.health_keepalive import get_cached_health_payload
 from app.core.log_buffer import log_buffer
 from app.services.logs_view_service import (
     distinct_users,
@@ -129,23 +130,35 @@ def _queue_health() -> dict[str, Any]:
         return {"status": "degraded", "backlog": 0, "error": str(exc)}
 
 
+@router.post("/internal/cron/scheduled-scans", include_in_schema=False)
+async def cron_scheduled_scans(
+    x_cron_secret: str = Header(default="", alias="X-Cron-Secret"),
+) -> dict[str, Any]:
+    """
+    Trigger overdue scheduled scans (Render cron). Requires CRON_SECRET on the API
+    and the same value in X-Cron-Secret.
+    """
+    secret = (settings.CRON_SECRET or "").strip()
+    if not secret or x_cron_secret != secret:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    from app.services.scheduler_service import run_overdue_scheduled_scans
+
+    return await run_overdue_scheduled_scans()
+
+
 @router.get("/health")
 async def health() -> dict[str, Any]:
-    mongo = await _mongo_health()
-    redis = redis_health()
-    overall = "ok"
-    if mongo["status"] != "ok":
-        overall = "degraded"
-    if settings.REDIS_ENABLED and redis.get("status") not in ("ok", "disabled"):
-        overall = "degraded"
-    return {
-        "status": overall,
-        "service": settings.APP_NAME,
-        "version": settings.APP_VERSION,
-        "environment": settings.ENVIRONMENT,
-        "logs_viewer": "/logs",
-        "logs_api": "/logs/api",
-    }
+    """
+    UptimeRobot / keep-alive endpoint: no DB, no auth, no scans.
+    Use GET /system/status for full dependency checks.
+    """
+    return get_cached_health_payload(
+        service=settings.APP_NAME,
+        version=settings.APP_VERSION,
+        environment=settings.ENVIRONMENT,
+        ttl_seconds=settings.HEALTH_CACHE_SECONDS,
+    )
 
 
 @router.get("/system/metrics")

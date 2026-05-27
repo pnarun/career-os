@@ -70,13 +70,13 @@ export function JobDetailsModal({ job, open, onClose }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-4 sm:items-center"
+      className="fixed inset-0 z-[300] flex items-start justify-center bg-black/45 p-4 pt-[calc(var(--app-topbar-height,3.5rem)+0.75rem)] backdrop-blur-2xl backdrop-saturate-125 sm:p-6 sm:pt-[calc(var(--app-topbar-height,4rem)+1rem)]"
       role="dialog"
       aria-modal="true"
       onClick={onClose}
     >
       <Card
-        className="max-h-[90vh] w-full max-w-2xl overflow-y-auto"
+        className="max-h-[min(85vh,calc(100svh-var(--app-topbar-height,3.5rem)-2rem))] w-full max-w-2xl overflow-y-auto"
         onClick={(event) => event.stopPropagation()}
       >
         <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">

@@ -321,12 +321,35 @@ async def apply_scan_profile_from_resume(resume) -> None:
     if not prefs:
         return
 
+    def _merge_list(existing: list[str], incoming: list[str]) -> list[str] | None:
+        if incoming:
+            seen: set[str] = set()
+            merged: list[str] = []
+            for item in list(existing or []) + list(incoming):
+                key = str(item).strip()
+                if not key:
+                    continue
+                lower = key.lower()
+                if lower in seen:
+                    continue
+                seen.add(lower)
+                merged.append(key)
+            return merged
+        return None
+
+    roles = _merge_list(prefs.target_roles, profile.get("target_roles") or [])
+    skills = _merge_list(prefs.target_skills, profile.get("target_skills") or [])
+    locations = _merge_list(prefs.preferred_locations, profile.get("preferred_locations") or [])
+
+    years = int(profile.get("years_experience") or 0)
+    years_value = years if years > 0 or not getattr(prefs, "years_experience", 0) else None
+
     update = UserPreferencesUpdate(
         resume_id=resume.id,
-        target_roles=profile.get("target_roles") or [],
-        target_skills=profile.get("target_skills") or [],
-        years_experience=int(profile.get("years_experience") or 0),
-        preferred_locations=profile.get("preferred_locations") or [],
+        target_roles=roles,
+        target_skills=skills,
+        years_experience=years_value,
+        preferred_locations=locations,
     )
     updated = await update_preferences(prefs.id, update)
     try:

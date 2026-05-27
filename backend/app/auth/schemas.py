@@ -37,6 +37,8 @@ class CheckEmailRequest(BaseModel):
 class CheckEmailResponse(BaseModel):
     exists: bool
     email: str
+    # Used to personalize the login step ("Hi Arun").
+    full_name: str | None = None
 
 
 class PasswordResetRequest(BaseModel):

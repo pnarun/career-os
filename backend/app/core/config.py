@@ -77,6 +77,14 @@ class Settings(BaseSettings):
 
     AUTH_DEV_EXPOSE_OTP: bool = False
 
+    """Shared secret for optional POST /internal/cron/scheduled-scans (not required with UptimeRobot)."""
+    CRON_SECRET: str = ""
+
+    HEALTH_CACHE_SECONDS: float = 2.0
+    SCHEDULER_HEARTBEAT_ENABLED: bool = True
+    """Run overdue scans once on process start (after sleep/deploy). Disable if you only rely on APScheduler slots."""
+    SCHEDULER_STARTUP_CATCHUP: bool = True
+
     # Cache TTLs (seconds)
     CACHE_PROVIDER_TTL: int = 300
     CACHE_ANALYTICS_TTL: int = 600

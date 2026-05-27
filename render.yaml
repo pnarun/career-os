@@ -52,16 +52,8 @@ services:
         sync: false
       - key: CLOUDINARY_API_SECRET
         sync: false
-
-  - type: cron
-    name: career-os-keepalive
-    schedule: "*/10 * * * *"
-    env: docker
-    dockerfilePath: ./backend/scripts/keepalive/Dockerfile
-    dockerContext: ./backend/scripts/keepalive
-    envVars:
-      - key: API_HEALTH_URL
-        sync: false
+  # Keep-alive: use UptimeRobot → GET /health every 5 min (see docs/render_keepalive.md).
+  # Render Cron Jobs are optional paid add-ons; not required for MVP.
 
   # - type: redis
   #   name: career-os-redis

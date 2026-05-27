@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { Bug, ChevronDown, ChevronUp, ShieldCheck } from "lucide-react"
 
+import { isDevBuild } from "@/lib/env"
 import { ProviderStatusPanel } from "@/components/ProviderStatusPanel"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
@@ -38,6 +39,8 @@ export function DebugSummaryPanel({
   className,
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded)
+
+  if (!isDevBuild) return null
 
   const collapsedHint = feedMeta?.providers
     ? `Providers: ${Object.entries(feedMeta.providers)

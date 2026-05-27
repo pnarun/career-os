@@ -50,7 +50,9 @@
 ### Render notes
 
 - **Free/starter plans** spin down when idle; first request after sleep can be slow (30–90s).
-- **Keep-alive cron** (`career-os-keepalive` in `render.yaml`) pings `/health` every 10 minutes so scheduled scans and emails can run. Set `API_HEALTH_URL` on the cron job to your API URL, e.g. `https://career-os-pd9g.onrender.com/health`.
+- **Free keep-alive:** use [UptimeRobot](https://uptimerobot.com) (or similar) to `GET /health` every **5 minutes** — see **[docs/render_keepalive.md](./render_keepalive.md)**. No extra Render services required.
+- `/health` is lightweight (no DB) and reports APScheduler status for monitoring.
+- On API startup, optional catch-up runs overdue scans once (`SCHEDULER_STARTUP_CATCHUP`, default `true`).
 - **Starter plan ($7/mo)** avoids spin-down; keep-alive is still recommended for scan reliability.
 - The **frontend wakes the API** on load at [career-os-two-chi.vercel.app](https://career-os-two-chi.vercel.app/) and disables Sign in / Continue until `/health` responds.
 - **Playwright/LinkedIn** runs in the container; LinkedIn session files are ephemeral unless you use persistent disk (optional upgrade).
@@ -93,6 +95,8 @@ After both are live:
 1. **Render** → set `FRONTEND_URL` = `https://your-app.vercel.app` (exact production URL).
 2. **Render** → ensure `CORS_ORIGIN_REGEX` = `https://.*\.vercel\.app` if you use Vercel preview URLs.
 3. **Vercel** → redeploy if you changed `VITE_*` variables (build-time only).
+
+**Debug UI:** Jobs feed “Debug summary” and “Historical Debug Mode” only appear in local dev (`npm run dev`). Production Vercel builds hide them automatically (`import.meta.env.DEV`).
 
 Test login from the Vercel URL; check browser DevTools → Network for CORS errors.
 

@@ -67,6 +67,12 @@ export function TagCombobox({
   const wrapRef = useRef(null)
   const menuRef = useRef(null)
   const inputRef = useRef(null)
+  const pickingRef = useRef(false)
+  const itemsRef = useRef(items)
+
+  useEffect(() => {
+    itemsRef.current = items
+  }, [items])
 
   const positionMenu = useCallback(() => {
     const el = inputRef.current
@@ -82,42 +88,65 @@ export function TagCombobox({
   }, [])
 
   const loadSuggestions = useCallback(
-    async (q) => {
-      const local = filterLocalSuggestions(LOCAL_POOL[kind] || [], q, items, 12)
+    async (q, itemsOverride = itemsRef.current) => {
+      const local = filterLocalSuggestions(LOCAL_POOL[kind] || [], q, itemsOverride, 12)
       const pool = LOCAL_POOL[kind] || []
-      // Local list is enough for empty/short queries; API augments when user types more.
-      if (!pool.length || q.trim().length < 2) {
+      if (!pool.length || q.trim().length < 1) {
         setSuggestions(local)
         setFetchError("")
-        return
+        return local
+      }
+      if (q.trim().length < 2) {
+        setSuggestions(local)
+        setFetchError("")
+        return local
       }
       try {
         const api = await fetchSuggestionsFromApi(kind, q)
-        setSuggestions(mergeSuggestions(api, local, items, 12))
+        const merged = mergeSuggestions(api, local, itemsOverride, 12)
+        setSuggestions(merged)
         setFetchError("")
+        return merged
       } catch {
         setSuggestions(local)
         setFetchError("")
+        return local
       }
     },
-    [kind, items]
+    [kind]
+  )
+
+  const refreshMenu = useCallback(
+    async (q = "") => {
+      await loadSuggestions(q)
+      positionMenu()
+      setOpen(true)
+    },
+    [loadSuggestions, positionMenu]
   )
 
   useEffect(() => {
+    if (!open) return undefined
     let cancelled = false
     const timer = setTimeout(() => {
       loadSuggestions(query).then(() => {
-        if (!cancelled) setOpen(true)
+        if (!cancelled) positionMenu()
       })
     }, 120)
     return () => {
       cancelled = true
       clearTimeout(timer)
     }
-  }, [query, loadSuggestions])
+  }, [query, loadSuggestions, open, positionMenu])
+
+  useEffect(() => {
+    if (!open) return
+    void loadSuggestions(query).then(() => positionMenu())
+  }, [items, open, query, loadSuggestions, positionMenu])
 
   useEffect(() => {
     const onDoc = (e) => {
+      if (pickingRef.current) return
       const target = e.target
       if (wrapRef.current?.contains(target) || menuRef.current?.contains(target)) {
         return
@@ -131,15 +160,23 @@ export function TagCombobox({
   const addItem = useCallback(
     (value) => {
       const v = String(value).trim()
-      if (!v || items.length >= maxItems) return
-      const exists = items.some((i) => i.toLowerCase() === v.toLowerCase())
-      if (exists) return
-      onChange([...items, v])
+      const currentItems = itemsRef.current
+      if (!v || currentItems.length >= maxItems) return
+      const exists = currentItems.some((i) => i.toLowerCase() === v.toLowerCase())
+      if (exists) {
+        setQuery("")
+        void refreshMenu("")
+        return
+      }
+      const nextItems = [...currentItems, v]
+      itemsRef.current = nextItems
+      onChange(nextItems)
       setQuery("")
-      setOpen(false)
+      setOpen(true)
+      void refreshMenu("")
       requestAnimationFrame(() => inputRef.current?.focus())
     },
-    [items, maxItems, onChange]
+    [maxItems, onChange, refreshMenu]
   )
 
   const removeItem = (value) => onChange(items.filter((i) => i !== value))
@@ -160,14 +197,18 @@ export function TagCombobox({
     if (e.key === "Escape") setOpen(false)
   }
 
+  const selectSuggestion = (value) => {
+    pickingRef.current = true
+    addItem(value)
+    queueMicrotask(() => {
+      pickingRef.current = false
+    })
+  }
+
   const showMenu = open && (suggestions.length > 0 || canAddCustom)
 
   useEffect(() => {
-    if (open) positionMenu()
-  }, [open, positionMenu])
-
-  useEffect(() => {
-    if (!showMenu) return
+    if (!showMenu) return undefined
     positionMenu()
     const onScroll = () => positionMenu()
     window.addEventListener("scroll", onScroll, true)
@@ -177,10 +218,6 @@ export function TagCombobox({
       window.removeEventListener("resize", onScroll)
     }
   }, [showMenu, positionMenu, query, suggestions.length])
-
-  const selectSuggestion = (value) => {
-    addItem(value)
-  }
 
   const menu =
     showMenu && menuStyle ? (
@@ -257,17 +294,16 @@ export function TagCombobox({
           placeholder={
             items.length >= maxItems
               ? `Max ${maxItems} reached — remove one to add more`
-              : `${placeholder} (Enter or click to add)`
+              : placeholder
           }
           className="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
           onChange={(e) => {
             setQuery(e.target.value)
-            setOpen(true)
+            if (!open) setOpen(true)
           }}
           onFocus={() => {
             setOpen(true)
-            positionMenu()
-            loadSuggestions(query)
+            void refreshMenu(query)
           }}
           onKeyDown={onKeyDown}
         />

@@ -5,7 +5,6 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.auth.dependencies import CurrentUser, get_current_user
 from app.auth.password_reset_service import (
     PasswordResetError,
-    check_email_registered,
     ensure_password_reset_indexes,
     request_password_reset_otp,
     reset_password_with_otp,
@@ -37,6 +36,7 @@ from app.auth.service import (
 )
 from app.models.user import UserPublic
 from app.services.user_service import UserAlreadyExistsError, UserServiceError
+from app.services.user_service import get_user_by_email
 
 logger = logging.getLogger(__name__)
 
@@ -46,8 +46,12 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 @router.post("/check-email", response_model=CheckEmailResponse)
 async def check_email(payload: CheckEmailRequest) -> CheckEmailResponse:
     email = str(payload.email).strip().lower()
-    exists = await check_email_registered(email)
-    return CheckEmailResponse(exists=exists, email=email)
+    user = await get_user_by_email(email)
+    return CheckEmailResponse(
+        exists=user is not None,
+        email=email,
+        full_name=user.full_name if user else None,
+    )
 
 
 @router.post("/password-reset/request", response_model=PasswordResetRequestResponse)
