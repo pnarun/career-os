@@ -76,6 +76,11 @@ export function RealtimeProvider({ children }) {
         return
       }
 
+      if (event === "disconnected") {
+        setConnected(false)
+        return
+      }
+
       if (event === "provider_batch") {
         const providers = payload.providers || []
         for (const item of providers) {

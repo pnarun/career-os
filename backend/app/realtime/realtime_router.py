@@ -25,7 +25,7 @@ async def realtime_websocket(
 ) -> None:
     """Authenticated WebSocket for user-scoped real-time events."""
     if not token:
-        logger.warning("[REALTIME] connection rejected: missing token")
+        logger.debug("[REALTIME] connection rejected: missing token")
         await _reject_websocket(websocket, 4401, "Missing token")
         return
 
@@ -37,11 +37,11 @@ async def realtime_websocket(
             await _reject_websocket(websocket, 4403, "Account disabled")
             return
     except ValueError as exc:
-        logger.warning("[REALTIME] connection rejected: invalid token (%s)", exc)
+        logger.debug("[REALTIME] connection rejected: invalid token (%s)", exc)
         await _reject_websocket(websocket, 4401, "Invalid or expired token")
         return
     except UserNotFoundError:
-        logger.warning("[REALTIME] connection rejected: user not found")
+        logger.debug("[REALTIME] connection rejected: user not found")
         await _reject_websocket(websocket, 4401, "Invalid token")
         return
 

@@ -1,4 +1,4 @@
-import { getAccessToken, getApiBaseUrl } from "./apiClient"
+import { getAccessToken, getApiBaseUrl, refreshAccessToken } from "./apiClient"
 
 const RECONNECT_BASE_MS = 1500
 const RECONNECT_MAX_MS = 30000
@@ -38,6 +38,16 @@ export class RealtimeClient {
       this._startPing()
     }
 
+    const emitDisconnected = () => {
+      this.handlers.forEach((handler) => {
+        try {
+          handler({ event: "disconnected" })
+        } catch {
+          /* ignore */
+        }
+      })
+    }
+
     ws.onmessage = (event) => {
       try {
         const payload = JSON.parse(event.data)
@@ -54,10 +64,25 @@ export class RealtimeClient {
       }
     }
 
-    ws.onclose = () => {
+    ws.onclose = async (event) => {
       this._stopPing()
       this.ws = null
-      if (this.shouldConnect) this._scheduleReconnect()
+      emitDisconnected()
+      if (!this.shouldConnect) return
+
+      const authRejected = event.code === 4401 || event.code === 4403
+      if (authRejected) {
+        const newToken = await refreshAccessToken()
+        if (newToken) {
+          this.reconnectAttempts = 0
+          this.connect()
+          return
+        }
+        this.shouldConnect = false
+        return
+      }
+
+      this._scheduleReconnect()
     }
 
     ws.onerror = () => {

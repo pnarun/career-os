@@ -45,7 +45,8 @@ export async function parseErrorMessage(response) {
   }
 }
 
-async function refreshAccessToken() {
+/** Refresh tokens using the stored refresh token (used by apiFetch and realtime WS). */
+export async function refreshAccessToken() {
   const refreshToken = getRefreshToken()
   if (!refreshToken) return null
 
