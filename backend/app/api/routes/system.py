@@ -34,6 +34,12 @@ async def root() -> RedirectResponse:
     return RedirectResponse(url="/logs", status_code=302)
 
 
+@router.head("/", include_in_schema=False)
+async def root_head() -> Response:
+    """Render's port probe uses HEAD / — return 200 to avoid false negatives."""
+    return Response(status_code=200)
+
+
 @router.get("/logs", response_class=HTMLResponse, include_in_schema=False)
 async def logs_viewer(
     limit: int = Query(default=200, ge=10, le=500),

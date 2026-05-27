@@ -153,6 +153,12 @@ async def _execute_scheduled_scan(preference_id: str) -> None:
                 preference_id,
             )
             return
+        if not (getattr(preferences, "resume_id", "") or "").strip():
+            logger.info(
+                "[SCHEDULED_SCAN_SKIPPED] preference_id=%s reason=missing_resume_id",
+                preference_id,
+            )
+            return
         await run_daily_job_scan_automation(preference_id)
     except UserPreferencesServiceError as exc:
         logger.error(
