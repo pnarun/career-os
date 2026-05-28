@@ -210,18 +210,26 @@ async def _execute_scan(
         raise ScanRunnerError(str(exc)) from exc
 
     latest_jobs = await get_latest_scan_jobs()
-    email_delivery = await _deliver_scan_email(
-        preferences,
-        latest_jobs,
-        scan_summary.scan_id,
-        scan_summary.scan_timestamp,
-        manual=manual,
-        last_email_scan_id=preferences.last_email_scan_id,
-        fetch_response=scan_summary,
-    )
-
-    emailed = email_delivery.sent
-    skip_reason = email_delivery.skipped_reason
+    # Scheduled scans send one digest email from job_scan_automation_service (not here).
+    if manual:
+        email_delivery = await _deliver_scan_email(
+            preferences,
+            latest_jobs,
+            scan_summary.scan_id,
+            scan_summary.scan_timestamp,
+            manual=True,
+            last_email_scan_id=preferences.last_email_scan_id,
+            fetch_response=scan_summary,
+        )
+        emailed = email_delivery.sent
+        skip_reason = email_delivery.skipped_reason
+    else:
+        email_delivery = EmailDeliveryResult(
+            to_email=preferences.email,
+            skipped_reason="scheduled_email_via_automation",
+        )
+        emailed = False
+        skip_reason = email_delivery.skipped_reason
 
     if user_id:
         await emit_scan_completed(

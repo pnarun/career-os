@@ -187,6 +187,26 @@
   }
 
   /* Landing page — light theme (scoped; overrides global `.dark` tokens) */
+  /* /privacy-policy — avoid overflow clipping; fixed sidebar aligned to max-w-6xl */
+  .landing-page.privacy-policy-page {
+    overflow: visible;
+  }
+
+  /* Row 2: left 1/4 nav fixed to viewport; right 3/4 scrolls with page */
+  @media (min-width: 1024px) {
+    .privacy-policy-page .privacy-policy-nav-fixed {
+      position: fixed;
+      top: 5rem;
+      z-index: 20;
+      width: calc((min(72rem, 100vw - 2rem) - 4.5rem) / 4);
+      max-width: 15rem;
+      max-height: calc(100svh - 6rem);
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      left: max(1rem, calc((100vw - 72rem) / 2 + 1rem));
+    }
+  }
+
   .landing-page {
     position: relative;
     min-height: 100svh;

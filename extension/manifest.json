@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "Career Lens for Career OS",
+  "version": "0.3.0",
+  "description": "Beta: securely sync your LinkedIn session with Career OS for job discovery and automation you control.",
+  "permissions": ["cookies", "storage", "tabs", "alarms"],
+  "host_permissions": [
+    "https://www.linkedin.com/*",
+    "https://*.linkedin.com/*",
+    "https://linkedin.com/*",
+    "https://career-os-pd9g.onrender.com/*",
+    "https://*.vercel.app/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Career Lens"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

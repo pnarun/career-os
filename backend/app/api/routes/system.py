@@ -10,8 +10,11 @@ from pydantic import BaseModel, Field
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
 
 from app.api.routes.logs_view_html import render_logs_page
+from app.api.routes.status_page_html import render_uptime_status_page
 from app.core.cache import cache_get, cache_set, cache_key
-from app.core.health_keepalive import get_cached_health_payload
+from app.core.health_keepalive import build_detailed_health_payload, get_cached_health_payload
+from app.api.routes.beta_ops_page_html import render_beta_ops_page
+from app.services.beta_ops_service import beta_ops_snapshot
 from app.core.log_buffer import log_buffer
 from app.services.logs_view_service import (
     distinct_users,
@@ -19,9 +22,11 @@ from app.services.logs_view_service import (
     get_log_entries,
 )
 from app.core.circuit_breaker import circuit_breaker_status
+from app.core.brand_assets import api_brand_logo_url, brand_logo_url_for_dark_page
 from app.core.config import settings
 from app.core.database import get_database
 from app.core.metrics import metrics
+from app.observability.operational_metrics import observability_snapshot
 from app.core.redis_client import redis_health
 from app.realtime.websocket_manager import realtime_manager
 
@@ -41,6 +46,52 @@ async def root_head() -> Response:
     return Response(status_code=200)
 
 
+def _uptimerobot_status_url() -> str:
+    page_url = (settings.UPTIMEROBOT_STATUS_PAGE_URL or "").strip()
+    if not page_url:
+        raise HTTPException(
+            status_code=503,
+            detail="UPTIMEROBOT_STATUS_PAGE_URL is not configured",
+        )
+    return page_url
+
+
+@router.get("/uptime/go", include_in_schema=False)
+async def uptime_status_redirect() -> RedirectResponse:
+    """Redirect to the public UptimeRobot status page (iframe embedding is blocked)."""
+    return RedirectResponse(url=_uptimerobot_status_url(), status_code=302)
+
+
+@router.get("/uptime", response_class=HTMLResponse, include_in_schema=False)
+async def uptime_status_viewer() -> HTMLResponse:
+    """
+    Developer hub: live API health + link to UptimeRobot status page.
+    Override URL with UPTIMEROBOT_STATUS_PAGE_URL.
+    """
+    page_url = _uptimerobot_status_url()
+    health = get_cached_health_payload(
+        service=settings.APP_NAME,
+        ttl_seconds=settings.HEALTH_CACHE_SECONDS,
+    )
+    system = await system_status()
+    html = render_uptime_status_page(
+        status_page_url=page_url,
+        app_name=settings.APP_NAME,
+        environment=settings.ENVIRONMENT,
+        logo_url=brand_logo_url_for_dark_page("full"),
+        favicon_url=api_brand_logo_url("symbol"),
+        health=health,
+        system=system,
+    )
+    return HTMLResponse(html)
+
+
+@router.get("/system/uptime", response_class=HTMLResponse, include_in_schema=True)
+async def uptime_status_viewer_alias() -> HTMLResponse:
+    """Alias for /uptime (visible in OpenAPI)."""
+    return await uptime_status_viewer()
+
+
 @router.get("/logs", response_class=HTMLResponse, include_in_schema=False)
 async def logs_viewer(
     limit: int = Query(default=200, ge=10, le=500),
@@ -58,6 +109,8 @@ async def logs_viewer(
         level_filter=level.strip().upper(),
         app_name=settings.APP_NAME,
         environment=settings.ENVIRONMENT,
+        logo_url=brand_logo_url_for_dark_page("full"),
+        favicon_url=api_brand_logo_url("symbol"),
     )
     return HTMLResponse(html)
 
@@ -199,13 +252,42 @@ async def health_head() -> Response:
 
 
 @router.get("/health")
-async def health_get() -> dict[str, Any]:
-    """Keep-alive JSON for browsers and GET monitors. Use /system/status for full checks."""
+async def health_get(
+    detail: bool = Query(False, description="Include mongo, websocket, scan & provider subsystems"),
+) -> dict[str, Any]:
+    """Health check. Default is minimal keep-alive; ?detail=1 for beta subsystem snapshot."""
     _log_health_ping_if_debug()
+    if detail:
+        return await build_detailed_health_payload(service=settings.APP_NAME)
     return get_cached_health_payload(
         service=settings.APP_NAME,
         ttl_seconds=settings.HEALTH_CACHE_SECONDS,
     )
+
+
+@router.get("/system/beta-ops", response_class=HTMLResponse, include_in_schema=False)
+async def beta_ops_viewer() -> HTMLResponse:
+    """Lightweight HTML ops dashboard for beta (JSON at /system/beta-ops/json)."""
+    health = await build_detailed_health_payload(service=settings.APP_NAME)
+    ops = await beta_ops_snapshot()
+    html = render_beta_ops_page(
+        app_name=settings.APP_NAME,
+        environment=settings.ENVIRONMENT,
+        logo_url=brand_logo_url_for_dark_page("full"),
+        favicon_url=api_brand_logo_url("symbol"),
+        system=health,
+        ops=ops,
+    )
+    return HTMLResponse(html)
+
+
+@router.get("/system/beta-ops/json", include_in_schema=True)
+async def beta_ops_json() -> dict[str, Any]:
+    """JSON operational snapshot for beta monitoring."""
+    return {
+        "health": await build_detailed_health_payload(service=settings.APP_NAME),
+        "ops": await beta_ops_snapshot(),
+    }
 
 
 @router.get("/system/metrics")
@@ -215,7 +297,7 @@ async def system_metrics() -> dict[str, Any]:
         return cached
 
     payload = {
-        **metrics.snapshot(),
+        **observability_snapshot(),
         "websocket_connections": realtime_manager.total_connections(),
         "environment": settings.ENVIRONMENT,
     }

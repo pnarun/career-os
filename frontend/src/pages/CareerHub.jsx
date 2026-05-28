@@ -1,6 +1,7 @@
 import { useState } from "react"
 
 import { TabbedHub } from "@/components/layout/TabbedHub"
+import { useHubTabPrefetch } from "@/hooks/useHubTabPrefetch"
 import { Applications } from "@/pages/Applications"
 import { InterviewPrep } from "@/pages/InterviewPrep"
 
@@ -11,6 +12,7 @@ const TABS = [
 
 export function CareerHub() {
   const [tab, setTab] = useState("applications")
+  useHubTabPrefetch("career", tab)
 
   return (
     <TabbedHub

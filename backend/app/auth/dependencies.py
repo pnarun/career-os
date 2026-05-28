@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass
 
 from fastapi import Depends, HTTPException, status
@@ -8,6 +9,7 @@ from app.core.user_context import clear_request_user, set_request_user
 from app.services.user_service import UserNotFoundError, get_user_by_id
 
 _bearer = HTTPBearer(auto_error=False)
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)

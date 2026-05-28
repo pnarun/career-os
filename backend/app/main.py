@@ -1,8 +1,12 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI
+from pathlib import Path
+
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.middleware.gzip import GZipMiddleware
 
 from app.auth.dependencies import get_current_user
@@ -15,6 +19,7 @@ from app.api.routes import match as match_routes
 from app.api.routes import preferences as preferences_routes
 from app.api.routes import resumes as resumes_routes
 from app.api.routes import scan as scan_routes
+from app.api.routes import scans as scans_routes
 from app.api.routes import applications as applications_routes
 from app.api.routes import automation as automation_routes
 from app.api.routes import scan_analytics as scan_analytics_routes
@@ -28,28 +33,15 @@ from app.api.routes import interview_ai as interview_ai_routes
 from app.api.routes import dashboard as dashboard_routes
 from app.api.routes import suggestions as suggestions_routes
 from app.api.routes import system as system_routes
-from app.services.application_service import ensure_application_indexes
-from app.services.auto_apply.apply_history_service import ensure_apply_indexes
+from app.db.indexes import ensure_all_mongo_indexes
 from app.services.automation_service import shutdown_automation
-from app.services.career_insight_service import ensure_career_insight_indexes
-from app.services.copilot.insight_memory_service import ensure_copilot_indexes
-from app.services.interview_ai.prep_progress_service import ensure_prep_indexes
-from app.services.interview_ai.web_question_service import ensure_web_question_cache_indexes
-from app.services.notification_service import ensure_notification_indexes
 from app.services.migration_service import run_legacy_data_migration, seed_demo_users
-from app.services.user_service import ensure_user_indexes
-from app.services.workspace_service import ensure_workspace_indexes
-from app.services.user_preferences_service import ensure_preferences_indexes
-from app.services.scan_session_service import ensure_scan_session_indexes
-from app.services.job_service import ensure_job_indexes
-from app.services.resume_service import ensure_resume_indexes
-from app.auth.service import ensure_auth_indexes
-from app.auth.password_reset_service import ensure_password_reset_indexes
 from app.core.config import settings
 from app.core.database import close_mongo_connection, connect_to_mongo
 from app.core.logging_config import configure_logging
 from app.core.rate_limit import RateLimitMiddleware
 from app.core.user_context_middleware import UserContextMiddleware
+from app.observability.api_latency_middleware import ApiLatencyMiddleware
 from app.core.redis_client import close_redis, get_redis
 from app.services.scheduler_service import shutdown_scheduler, start_scheduler
 
@@ -68,25 +60,17 @@ async def lifespan(app: FastAPI):
         )
         await connect_to_mongo()
         get_redis()
-        await ensure_user_indexes()
-        await ensure_workspace_indexes()
-        await ensure_auth_indexes()
-        await ensure_preferences_indexes()
-        await ensure_scan_session_indexes()
-        await ensure_job_indexes()
-        await ensure_resume_indexes()
-        await ensure_application_indexes()
-        await ensure_notification_indexes()
-        await ensure_career_insight_indexes()
-        await ensure_apply_indexes()
-        await ensure_prep_indexes()
-        await ensure_copilot_indexes()
-        await ensure_web_question_cache_indexes()
-        await ensure_password_reset_indexes()
+        from app.services.cache_service import init_upstash_cache
+
+        init_upstash_cache()
+        await ensure_all_mongo_indexes()
         await run_legacy_data_migration()
         await seed_demo_users()
         await start_scheduler()
         realtime_task = await start_realtime_subscriber()
+        from app.core.startup_checks import log_startup_verification
+
+        await log_startup_verification()
         logger.info("Application ready", extra={"event": "startup", "status": "ok"})
     except Exception:
         logger.exception("Failed to initialize application on startup")
@@ -109,6 +93,7 @@ app = FastAPI(
 )
 
 app.add_middleware(GZipMiddleware, minimum_size=500)
+app.add_middleware(ApiLatencyMiddleware)
 app.add_middleware(RateLimitMiddleware)
 _cors_kwargs: dict = {
     "allow_origins": settings.effective_cors_origins,
@@ -131,6 +116,20 @@ logger.info(
 
 _auth = [Depends(get_current_user)]
 
+_brand_static = Path(__file__).resolve().parent / "static" / "brand"
+if _brand_static.is_dir():
+    app.mount("/brand", StaticFiles(directory=str(_brand_static)), name="brand")
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon() -> FileResponse:
+    """Browsers request /favicon.ico on API tabs (docs, /logs, /uptime)."""
+    icon = _brand_static / "career-os-logo-symbol.png"
+    if not icon.is_file():
+        raise HTTPException(status_code=404)
+    return FileResponse(icon, media_type="image/png")
+
+
 app.include_router(system_routes.router)
 app.include_router(auth_router)
 app.include_router(realtime_router)
@@ -144,8 +143,10 @@ app.include_router(preferences_routes.router, dependencies=_auth)
 app.include_router(suggestions_routes.router, dependencies=_auth)
 app.include_router(resumes_routes.router, dependencies=_auth)
 app.include_router(scan_routes.router, dependencies=_auth)
+app.include_router(scans_routes.router, dependencies=_auth)
 app.include_router(scan_analytics_routes.router, dependencies=_auth)
 app.include_router(automation_routes.router, dependencies=_auth)
+app.include_router(automation_routes.public_router)
 app.include_router(notifications_routes.router, dependencies=_auth)
 app.include_router(auto_apply_routes.router, dependencies=_auth)
 app.include_router(resume_ai_routes.router, dependencies=_auth)

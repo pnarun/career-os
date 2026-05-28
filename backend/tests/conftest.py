@@ -17,21 +17,7 @@ _LIFECYCLE_MOCKS: tuple[str, ...] = (
     "app.main.start_realtime_subscriber",
     "app.main.run_legacy_data_migration",
     "app.main.seed_demo_users",
-    "app.main.ensure_user_indexes",
-    "app.main.ensure_workspace_indexes",
-    "app.main.ensure_auth_indexes",
-    "app.main.ensure_preferences_indexes",
-    "app.main.ensure_scan_session_indexes",
-    "app.main.ensure_job_indexes",
-    "app.main.ensure_resume_indexes",
-    "app.main.ensure_application_indexes",
-    "app.main.ensure_notification_indexes",
-    "app.main.ensure_career_insight_indexes",
-    "app.main.ensure_apply_indexes",
-    "app.main.ensure_prep_indexes",
-    "app.main.ensure_copilot_indexes",
-    "app.main.ensure_web_question_cache_indexes",
-    "app.main.ensure_password_reset_indexes",
+    "app.main.ensure_all_mongo_indexes",
 )
 
 

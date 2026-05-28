@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from "react"
+import { memo, useEffect, useState } from "react"
 import {
+  AlertCircle,
   BarChart3,
   Briefcase,
   Loader2,
@@ -20,14 +21,17 @@ import {
   SalaryBarChart,
   SkillDemandChart,
 } from "@/components/careerAnalytics/CareerAnalyticsCharts"
+import { EmptyState } from "@/components/EmptyState"
 import { SlowLoadingPageCenter } from "@/components/SlowLoadingStatus"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { useCareerAnalyticsDashboard } from "@/hooks/useCareerAnalyticsDashboard"
 import { cn } from "@/lib/utils"
+import { humanizeErrorMessage } from "@/lib/userFacingErrors"
 import { getPreferences } from "@/services/preferencesService"
-import { getCareerAnalyticsDashboard, scoreColor } from "@/services/careerAnalyticsService"
+import { scoreColor } from "@/services/careerAnalyticsService"
 
-function KpiCard({ icon: Icon, label, value, sub }) {
+const KpiCard = memo(function KpiCard({ icon: Icon, label, value, sub }) {
   return (
     <Card>
       <CardContent className="flex items-center gap-3 py-4">
@@ -40,48 +44,112 @@ function KpiCard({ icon: Icon, label, value, sub }) {
       </CardContent>
     </Card>
   )
-}
+})
 
 export function CareerAnalytics() {
-  const [data, setData] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
   const [roleOptions, setRoleOptions] = useState([])
   const [selectedRole, setSelectedRole] = useState("")
+  const [prefsReady, setPrefsReady] = useState(false)
 
   useEffect(() => {
+    let cancelled = false
     getPreferences()
       .then((prefs) => {
+        if (cancelled) return
         const roles = prefs?.target_roles ?? []
         setRoleOptions(roles)
-        if (roles.length && !selectedRole) setSelectedRole(roles[0])
+        setSelectedRole((prev) => prev || roles[0] || "")
       })
-      .catch(() => {})
+      .catch(() => {
+        if (!cancelled) setSelectedRole((prev) => prev || "")
+      })
+      .finally(() => {
+        if (!cancelled) setPrefsReady(true)
+      })
+    return () => {
+      cancelled = true
+    }
   }, [])
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const dashboard = await getCareerAnalyticsDashboard(selectedRole)
-      setData(dashboard)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load analytics")
-    } finally {
-      setLoading(false)
-    }
-  }, [selectedRole])
+  const {
+    data,
+    isLoading,
+    isFetching,
+    isPending,
+    isError,
+    error: queryError,
+    refetch,
+  } = useCareerAnalyticsDashboard(selectedRole, { enabled: prefsReady })
 
-  useEffect(() => {
-    load()
-  }, [load])
+  const error = isError
+    ? humanizeErrorMessage(
+        queryError instanceof Error ? queryError.message : "Failed to load analytics"
+      )
+    : null
 
-  if (loading) {
-    return <SlowLoadingPageCenter active messageKey="page-load" />
+  const showLoading = !prefsReady || isPending || ((isLoading || isFetching) && !data)
+
+  if (showLoading) {
+    return (
+      <SlowLoadingPageCenter
+        active
+        messageKey="career-analytics"
+        delayMs={0}
+        className="min-h-[50vh]"
+      />
+    )
   }
 
-  const salary = data?.salary_insights
+  if (isError && !data) {
+    return (
+      <div className="mx-auto max-w-6xl space-y-4 py-12 text-center">
+        <AlertCircle className="mx-auto size-10 text-destructive" />
+        <p className="text-sm font-medium text-foreground">Could not load career analytics</p>
+        <p className="mx-auto max-w-md text-xs text-muted-foreground">{error}</p>
+        <Button variant="outline" size="sm" onClick={() => refetch()}>
+          <RefreshCw className="mr-2 size-4" />
+          Try again
+        </Button>
+      </div>
+    )
+  }
+
+  if (!data) {
+    return (
+      <SlowLoadingPageCenter
+        active
+        messageKey="career-analytics"
+        delayMs={0}
+        className="min-h-[50vh]"
+      />
+    )
+  }
+
+  const salary = data.salary_insights
   const market = data?.market_trends
+  const jobsAnalyzed = Number(market?.total_jobs_analyzed ?? 0)
+
+  if (jobsAnalyzed === 0) {
+    return (
+      <div className="mx-auto max-w-6xl space-y-6">
+        <div>
+          <div className="flex items-center gap-2">
+            <BarChart3 className="size-6 text-teal-400" />
+            <h2 className="text-2xl font-semibold tracking-tight">Career Analytics</h2>
+          </div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Market intelligence built from your scans and job feed
+          </p>
+        </div>
+        <EmptyState
+          icon={BarChart3}
+          title="Analytics will appear after your first scan"
+          description="Run Fetch Jobs from the Jobs page (and connect LinkedIn via Career Lens if you use LinkedIn). Charts and salary insights need job data to analyze."
+        />
+      </div>
+    )
+  }
+
   const skills = data?.skill_demand
   const funnel = data?.application_funnel
   const providers = data?.provider_performance
@@ -116,16 +184,23 @@ export function CareerAnalytics() {
               ))}
             </select>
           )}
-          <Button variant="outline" size="sm" onClick={load}>
-            <RefreshCw className="mr-2 size-4" />
+          <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
+            <RefreshCw className={cn("mr-2 size-4", isFetching && "animate-spin")} />
             Refresh
           </Button>
         </div>
       </div>
 
-      {error ? (
-        <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-2 text-sm text-destructive">
-          {error}
+      {error && data ? (
+        <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm text-amber-200">
+          Refresh failed: {error}
+        </p>
+      ) : null}
+
+      {isFetching && data ? (
+        <p className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Loader2 className="size-3.5 animate-spin" />
+          Updating analytics…
         </p>
       ) : null}
 

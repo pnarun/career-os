@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+import secrets
 from jose import JWTError, jwt
 
 from app.core.config import settings
@@ -31,6 +32,7 @@ def create_refresh_token(subject: str) -> str:
         "sub": subject,
         "type": TOKEN_TYPE_REFRESH,
         "exp": expire,
+        "jti": secrets.token_urlsafe(16),
     }
     return jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 

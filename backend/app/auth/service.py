@@ -201,16 +201,29 @@ async def refresh_tokens(refresh_token: str) -> TokenResponse:
     except ValueError as exc:
         raise AuthServiceError(str(exc)) from exc
 
-    if not await _is_refresh_token_valid(user_id, refresh_token):
+    token_hash = _hash_refresh_token(refresh_token)
+    revoked = await _get_refresh_collection().find_one_and_update(
+        {"token_hash": token_hash, "user_id": user_id, "revoked": False},
+        {"$set": {"revoked": True}},
+    )
+    if not revoked:
         raise AuthServiceError("Refresh token revoked or expired")
 
     user = await get_user_by_id(user_id)
     if not user.is_active:
         raise AuthServiceError("Account is disabled")
 
-    await _revoke_refresh_token(refresh_token)
     tokens = _build_tokens(user.id, user.workspace_id)
-    await _store_refresh_token(user.id, tokens.refresh_token)
+    try:
+        await _store_refresh_token(user.id, tokens.refresh_token)
+    except Exception as exc:
+        from pymongo.errors import DuplicateKeyError
+
+        if isinstance(exc, DuplicateKeyError):
+            tokens = _build_tokens(user.id, user.workspace_id)
+            await _store_refresh_token(user.id, tokens.refresh_token)
+        else:
+            raise
     return tokens
 
 

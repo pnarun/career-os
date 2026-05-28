@@ -1,5 +1,12 @@
-const CACHE = "career-os-shell-v2"
-const SHELL = ["/", "/index.html", "/favicon.svg", "/manifest.webmanifest"]
+const CACHE = "career-os-shell-v5"
+const SHELL = [
+  "/",
+  "/index.html",
+  "/career-os-logo-symbol.png",
+  "/career-os-logo-full.png",
+  "/career-os-logo-black.png",
+  "/manifest.webmanifest",
+]
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

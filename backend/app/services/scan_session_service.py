@@ -25,9 +25,9 @@ def _get_collection() -> AsyncIOMotorCollection:
 
 
 async def ensure_scan_session_indexes() -> None:
-    collection = _get_collection()
-    await collection.create_index("user_id")
-    await collection.create_index([("user_id", 1), ("created_at", -1)])
+    from app.db.indexes import ensure_collection_indexes
+
+    await ensure_collection_indexes(SCAN_SESSIONS_COLLECTION)
 
 
 async def save_scan_session(
@@ -119,12 +119,13 @@ async def list_recent_scan_sessions(
     """Historical scan summaries (newest first) for a user."""
     try:
         collection = _get_collection()
+        effective_limit = min(max(1, limit), 50)
         cursor = (
             collection.find({"user_id": user_id})
             .sort("created_at", -1)
-            .limit(limit)
+            .limit(effective_limit)
         )
-        documents = await cursor.to_list(length=limit)
+        documents = await cursor.to_list(length=effective_limit)
         return [ScanSessionDocument.from_mongo(doc) for doc in documents]
     except RuntimeError as exc:
         raise ScanSessionServiceError("Database is not available") from exc

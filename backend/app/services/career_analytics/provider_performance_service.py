@@ -14,7 +14,11 @@ async def build_provider_performance() -> dict[str, Any]:
     collection = get_database()["applications"]
     from app.services.application_service import _scoped_query
 
-    applications = await collection.find(_scoped_query()).to_list(length=1000)
+    cursor = collection.find(
+        _scoped_query(),
+        {"status": 1, "source": 1, "match_score": 1},
+    ).limit(500)
+    applications = await cursor.to_list(length=500)
 
     provider_jobs: dict[str, list] = {}
     for job in jobs:

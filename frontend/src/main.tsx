@@ -6,7 +6,9 @@ import { AppErrorBoundary } from "@/components/AppErrorBoundary"
 import { AuthProvider } from "@/context/AuthContext"
 import { BackendWakeProvider } from "@/context/BackendWakeContext"
 import { RealtimeProvider } from "@/context/RealtimeContext"
+import { isPublicStandaloneRoute } from "@/lib/publicRoutes"
 import { queryClient } from "@/lib/queryClient"
+import { PrivacyPolicyPage } from "@/pages/PrivacyPolicyPage"
 import App from "./App.tsx"
 import "./index.css"
 
@@ -18,18 +20,26 @@ if ("serviceWorker" in navigator && import.meta.env.PROD) {
   })
 }
 
+function Root() {
+  const isPrivacyPage = isPublicStandaloneRoute()
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <BackendWakeProvider>
+        <AuthProvider>
+          <RealtimeProvider suspendOnPublicPages={isPrivacyPage}>
+            {isPrivacyPage ? <PrivacyPolicyPage /> : <App />}
+          </RealtimeProvider>
+        </AuthProvider>
+      </BackendWakeProvider>
+    </QueryClientProvider>
+  )
+}
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <AppErrorBoundary>
-      <QueryClientProvider client={queryClient}>
-        <BackendWakeProvider>
-          <AuthProvider>
-            <RealtimeProvider>
-              <App />
-            </RealtimeProvider>
-          </AuthProvider>
-        </BackendWakeProvider>
-      </QueryClientProvider>
+      <Root />
     </AppErrorBoundary>
   </StrictMode>
 )

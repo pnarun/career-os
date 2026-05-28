@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from app.services.job_filter_service import filter_normalized_jobs
@@ -187,12 +188,21 @@ def _merge_linkedin_result(
     return merged, fetch_meta
 
 
-async def fetch_public_jobs_async() -> PublicJobsFetchResult:
+ProviderCompleteCallback = Callable[[str, str, int, str], None]
+
+
+async def fetch_public_jobs_async(
+    *,
+    on_provider_complete: ProviderCompleteCallback | None = None,
+) -> PublicJobsFetchResult:
     """
     Fetch all platforms concurrently:
     HTTP/RSS sources (aggregator) + LinkedIn (Playwright session).
     """
     logger.info("[FETCH] Starting full-platform scan (HTTP sources + LinkedIn)")
+
+    if on_provider_complete:
+        on_provider_complete("linkedin", "running", 0, "")
 
     async def _fetch_linkedin() -> SourceFetchResult | BaseException:
         try:
@@ -206,7 +216,7 @@ async def fetch_public_jobs_async() -> PublicJobsFetchResult:
             return exc
 
     aggregation_result, linkedin_result = await asyncio.gather(
-        aggregate_jobs(),
+        aggregate_jobs(on_provider_complete=on_provider_complete),
         _fetch_linkedin(),
         return_exceptions=True,
     )
@@ -223,6 +233,21 @@ async def fetch_public_jobs_async() -> PublicJobsFetchResult:
         aggregation,
         linkedin_result,
     )
+
+    if on_provider_complete:
+        linkedin_count = int(aggregation.sources.get("linkedin", 0))
+        linkedin_status = linkedin_meta.get("status", "")
+        if linkedin_status in ("ok",):
+            on_provider_complete("linkedin", "success", linkedin_count, "")
+        elif linkedin_status:
+            on_provider_complete(
+                "linkedin",
+                "failed",
+                linkedin_count,
+                str(linkedin_meta.get("message") or "LinkedIn fetch failed"),
+            )
+        else:
+            on_provider_complete("linkedin", "failed", 0, "LinkedIn not run")
 
     try:
         from app.services.job_sources.company_careers_source import fetch_all_target_company_jobs

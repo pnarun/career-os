@@ -7,6 +7,8 @@ const EVENT_ICON = {
   scan_started: Loader2,
   scan_completed: CheckCircle2,
   scan_failed: XCircle,
+  provider_started: Loader2,
+  provider_completed: CheckCircle2,
   email_delivered: CheckCircle2,
   ai_scoring_complete: CheckCircle2,
   jobs_fetched: CheckCircle2,
@@ -23,13 +25,17 @@ function iconFor(event) {
 
 export function LiveExecutionTimeline({ className }) {
   const { timeline, clearTimeline } = useRealtimeTimeline()
-  const { connected } = useRealtimeConnection()
+  const { connected, networkOnline } = useRealtimeConnection()
 
   if (!timeline.length) {
     return (
       <div className={cn("rounded-lg border border-dashed border-border/60 p-4 text-center", className)}>
         <p className="text-sm text-muted-foreground">
-          {connected ? "Waiting for live automation events…" : "Connecting to live stream…"}
+          {!networkOnline
+            ? "You're offline — we'll resume live updates when you're back online."
+            : connected
+              ? "Waiting for live scan events…"
+              : "Connecting for live progress…"}
         </p>
       </div>
     )
@@ -39,7 +45,12 @@ export function LiveExecutionTimeline({ className }) {
     <div className={cn("space-y-2", className)}>
       <div className="flex items-center justify-between gap-2">
         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Live execution {connected ? "· connected" : "· reconnecting"}
+          Live execution{" "}
+          {!networkOnline
+            ? "· offline"
+            : connected
+              ? "· live"
+              : "· reconnecting…"}
         </p>
         <button
           type="button"
@@ -52,7 +63,10 @@ export function LiveExecutionTimeline({ className }) {
       <ol className="max-h-64 space-y-1 overflow-y-auto rounded-lg border border-border/60 bg-muted/20 p-3 font-mono text-xs">
         {timeline.map((entry, index) => {
           const Icon = iconFor(entry)
-          const spinning = entry.event === "scan_started"
+          const spinning =
+            entry.event === "scan_started" ||
+            entry.event === "provider_started" ||
+            entry.event === "scan_progress"
           const failed =
             entry.event === "scan_failed" ||
             entry.event === "provider_status" ||

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import random
+import sys
 import time
 import traceback
 from typing import Any, TYPE_CHECKING
@@ -15,6 +16,10 @@ from typing import Any, TYPE_CHECKING
 if TYPE_CHECKING:
     from playwright.sync_api import Browser, BrowserContext
 
+from app.automation.browser.automation_errors import (
+    assert_headed_browser_available,
+    user_facing_automation_error,
+)
 from app.automation.browser.screenshot_service import (
     capture_error_state_sync,
     capture_page_sync,
@@ -23,6 +28,7 @@ from app.automation.browser.screenshot_service import (
 from app.automation.browser.session_manager import (
     get_platform_home_url,
     load_session,
+    load_session_bundle,
     normalize_platform,
     session_exists,
     _session_path,
@@ -62,6 +68,18 @@ def _user_agent() -> str:
     return _settings().PLAYWRIGHT_USER_AGENT or DEFAULT_USER_AGENT
 
 
+def _chromium_launch_args(*, headless: bool) -> list[str]:
+    args = [
+        "--disable-dev-shm-usage",
+        "--disable-blink-features=AutomationControlled",
+    ]
+    if sys.platform == "linux":
+        args.append("--no-sandbox")
+    if headless:
+        args.extend(["--disable-gpu", "--hide-scrollbars"])
+    return args
+
+
 def _launch_headless(override: bool | None) -> bool:
     return _settings().PLAYWRIGHT_HEADLESS if override is None else override
 
@@ -96,6 +114,7 @@ def _ensure_browser(headless: bool | None = None, *, trace_session: bool = False
     _browser = _playwright.chromium.launch(
         headless=launch_headless,
         slow_mo=slow_mo if slow_mo > 0 else None,
+        args=_chromium_launch_args(headless=launch_headless),
     )
     _log(f"[SESSION] Chromium launched connected={_browser.is_connected()}")
     logger.info("[AUTOMATION][BROWSER] chromium ready")
@@ -150,6 +169,7 @@ def create_context_sync(
     platform: str | None = None,
     headless: bool | None = None,
     use_saved_session: bool = False,
+    user_id: str | None = None,
     trace_session: bool = False,
 ) -> Any:
     def _log(msg: str) -> None:
@@ -168,9 +188,15 @@ def create_context_sync(
     }
 
     storage_state = None
+    session_user_agent = ""
     if use_saved_session and platform:
         _log(f"[SESSION] Loading saved storage state for platform={platform}")
-        storage_state = load_session(platform)
+        bundle = load_session_bundle(platform, user_id)
+        if bundle:
+            storage_state = bundle.get("storage_state")
+            session_user_agent = str(bundle.get("user_agent") or "").strip()
+        else:
+            storage_state = load_session(platform, user_id)
         _log(
             "[SESSION] Storage state loaded"
             if storage_state
@@ -178,6 +204,9 @@ def create_context_sync(
         )
     if storage_state is not None:
         options["storage_state"] = storage_state
+    if session_user_agent:
+        options["user_agent"] = session_user_agent
+        _log("[SESSION] Using saved user_agent from session bundle")
 
     _log("[SESSION] Creating browser context")
     context = browser.new_context(**options)
@@ -559,6 +588,7 @@ def prepare_platform_session_sync(
     platform: str,
     *,
     headless: bool | None = None,
+    user_id: str | None = None,
 ) -> dict[str, Any]:
     """
     Open headed browser for manual login; save storage state only after user closes it.
@@ -593,9 +623,10 @@ def prepare_platform_session_sync(
         home_url = get_platform_home_url(platform)
         key = normalize_platform(platform)
         clear_manual_done(key, "prepare")
-        session_path = _session_path(key)
+        session_path = _session_path(key, user_id)
         session_log(f"[SESSION] Platform={key} home_url={home_url}")
 
+        assert_headed_browser_available()
         session_log("[SESSION] Launching Chromium")
         browser = _ensure_browser(headless=False, trace_session=True)
         session_log("[SESSION] Chromium launched")
@@ -635,6 +666,16 @@ def prepare_platform_session_sync(
 
         session_log("[SESSION] Saving authenticated session")
         _persist_storage_state()
+
+        if user_id and state_saved["done"]:
+            from app.services.browser_session_store import save_storage_state_sync
+
+            storage = context.storage_state()
+            save_storage_state_sync(
+                user_id=user_id,
+                platform=key,
+                storage_state=storage,
+            )
 
         if not state_saved["done"] and timed_out and _context_has_cookies(context):
             session_log("[SESSION] Retrying save after timeout (cookies present)")
@@ -710,7 +751,7 @@ def prepare_platform_session_sync(
             "session_saved": session_exists(platform) if key else False,
             "session_path": "",
             "home_url": home_url,
-            "message": f"{exc}\n\n{tb}",
+            "message": user_facing_automation_error(exc),
         }
     finally:
         session_log("[SESSION] finally: closing browser")
@@ -722,7 +763,7 @@ def prepare_platform_session_sync(
 test_platform_session_sync = prepare_platform_session_sync
 
 
-def open_session_sync(platform: str) -> dict[str, Any]:
+def open_session_sync(platform: str, *, user_id: str | None = None) -> dict[str, Any]:
     """
     Launch headed Chromium with saved storage state for visual verification.
 
@@ -731,7 +772,7 @@ def open_session_sync(platform: str) -> dict[str, Any]:
     key = normalize_platform(platform)
     home_url = get_platform_home_url(platform)
 
-    if not is_session_ready(platform):
+    if not is_session_ready(platform, user_id=user_id):
         return {
             "status": "error",
             "platform": key,
@@ -747,20 +788,23 @@ def open_session_sync(platform: str) -> dict[str, Any]:
             consume_manual_done,
         )
 
+        assert_headed_browser_available()
         clear_manual_done(key, "open")
         browser = _ensure_browser(headless=False)
         context = create_context_sync(
             platform=platform,
             headless=False,
             use_saved_session=True,
+            user_id=user_id,
         )
         page = context.new_page()
         _human_delay(300, 500)
         page.goto(home_url, wait_until="domcontentloaded", timeout=60_000)
 
         logger.info(
-            "[AUTOMATION][OPEN_SESSION] platform=%s headed browser open",
+            "[AUTOMATION][OPEN_SESSION] platform=%s user=%s headed browser open",
             key,
+            user_id or "legacy",
         )
 
         _wait_for_all_pages_closed(
@@ -780,7 +824,7 @@ def open_session_sync(platform: str) -> dict[str, Any]:
         return {
             "status": "error",
             "platform": key,
-            "message": str(exc),
+            "message": user_facing_automation_error(exc),
         }
     finally:
         if context is not None:

@@ -23,7 +23,11 @@ def _dispatch_prepare_session(payload: dict) -> dict:
     from app.automation.browser.sync_runner import prepare_platform_session_sync
 
     _trace("prepare-session: calling prepare_platform_session_sync")
-    return prepare_platform_session_sync(platform, headless=payload.get("headless"))
+    return prepare_platform_session_sync(
+        platform,
+        headless=payload.get("headless"),
+        user_id=payload.get("user_id"),
+    )
 
 
 def _dispatch_command(command: str, payload: dict) -> dict:
@@ -47,7 +51,10 @@ def _dispatch_command(command: str, payload: dict) -> dict:
     if command == "open-session":
         from app.automation.browser.sync_runner import open_session_sync
 
-        return open_session_sync(payload["platform"])
+        return open_session_sync(
+            payload["platform"],
+            user_id=payload.get("user_id"),
+        )
 
     if command == "linkedin-discover":
         from app.services.job_sources.linkedin_playwright_source import (

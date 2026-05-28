@@ -1,6 +1,7 @@
 import { useState } from "react"
-import { ArrowLeft, Briefcase, Loader2 } from "lucide-react"
+import { ArrowLeft, Loader2 } from "lucide-react"
 
+import { CareerOsLogo } from "@/components/brand/CareerOsLogo"
 import { useAuth } from "@/context/AuthContext"
 import { SlowLoadingFormHint } from "@/components/SlowLoadingStatus"
 import { WakeAwareButton } from "@/components/WakeAwareButton"
@@ -187,9 +188,7 @@ export function AuthPage({ onBack }) {
     <div className="neon-app-shell relative flex min-h-svh items-center justify-center p-4">
       <Card className="neon-glass relative z-10 w-full max-w-md">
         <CardHeader className="space-y-3 text-center">
-          <div className="neon-glow-sm mx-auto flex size-12 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white">
-            <Briefcase className="size-6" />
-          </div>
+          <CareerOsLogo variant="full" size="md" className="mx-auto" />
           <CardTitle className="text-2xl">{titles[step]}</CardTitle>
           <CardDescription>{descriptions[step]}</CardDescription>
         </CardHeader>

@@ -10,7 +10,7 @@
 | Tailwind CSS | v4 via `@tailwindcss/vite` |
 | TanStack Query | Server state for dashboard, jobs, etc. |
 | Recharts | Analytics charts |
-| react-window | Virtualized job grid |
+| Job list pagination | `VirtualizedJobGrid.jsx` + `JobListPagination.jsx` (6 per page, CSS grid) |
 
 **No React Router** for in-app pages — see navigation below.
 
@@ -109,7 +109,9 @@ All use `apiFetch` from `apiClient.js`.
 | Modals | `AppModal.jsx` — center/top, glass backdrops |
 | Confirm | `ConfirmDialog.jsx` |
 | Job modals | `JobDetailsModal`, `JobDescriptionModal`, etc. |
-| Virtualized list | `VirtualizedJobGrid.jsx` |
+| Paginated job grid | `VirtualizedJobGrid.jsx`, `JobListPagination.jsx` |
+| Public legal page | `PrivacyPolicyPage.jsx` — `/privacy-policy` (bootstrapped in `main.tsx`, no auth) |
+| Beta UX | `BetaWelcomeModal.jsx`, `BetaSupportSection.jsx` (Settings) |
 | Onboarding | `ResumeOnboardingModal`, `PlatformTour` |
 | Footer | `SiteFooter.jsx` — Career Lens / ELVA Tech links |
 

@@ -78,8 +78,19 @@ def configure_logging(*, service: str = "career-os-api", level: str = "INFO") ->
     ring_handler.setFormatter(formatter)
     root.addHandler(ring_handler)
 
-    for name in ("urllib3", "httpx", "httpcore", "apscheduler", "motor"):
+    for name in (
+        "urllib3",
+        "httpx",
+        "httpcore",
+        "apscheduler",
+        "motor",
+        "uvicorn.access",
+        "watchfiles",
+    ):
         logging.getLogger(name).setLevel(logging.WARNING)
+
+    if level.upper() in ("WARNING", "ERROR", "CRITICAL"):
+        logging.getLogger("app").setLevel(getattr(logging, level.upper(), logging.WARNING))
 
 
 def log_event(

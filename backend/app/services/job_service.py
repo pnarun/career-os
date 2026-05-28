@@ -1,8 +1,14 @@
+import asyncio
 import logging
+from collections.abc import Callable
+from contextvars import ContextVar
 from datetime import datetime, timezone
 from typing import Any
 
 from motor.motor_asyncio import AsyncIOMotorCollection
+
+from app.core.config import settings
+from app.db.mongo_perf import explain_find_if_debug, timed_to_list
 
 from app.realtime.provider_status_stream import emit_provider_batch, emit_provider_status
 from app.realtime.scan_event_service import emit_ai_scoring_complete, emit_jobs_fetched
@@ -39,6 +45,65 @@ logger = logging.getLogger(__name__)
 JOBS_COLLECTION = "jobs"
 SCAN_BATCH_LIMIT = 200
 HISTORY_DEBUG_LIMIT = 500
+ANALYTICS_HISTORY_LIMIT = 1500
+
+_latest_scan_jobs_cache: ContextVar[list[JobDocument] | None] = ContextVar(
+    "latest_scan_jobs_cache",
+    default=None,
+)
+_latest_scan_jobs_lock = asyncio.Lock()
+
+_analytics_jobs_cache: ContextVar[tuple[int, list[JobDocument]] | None] = ContextVar(
+    "analytics_jobs_cache",
+    default=None,
+)
+_analytics_jobs_lock = asyncio.Lock()
+
+# Fields required for feed, dashboard previews, and analytics (excludes unused blobs).
+JOB_READ_PROJECTION: dict[str, int] = {
+    "_id": 1,
+    "user_id": 1,
+    "title": 1,
+    "company": 1,
+    "company_tag": 1,
+    "location": 1,
+    "apply_url": 1,
+    "source": 1,
+    "description": 1,
+    "easy_apply": 1,
+    "job_type": 1,
+    "remote_priority": 1,
+    "india_focused": 1,
+    "actionable_in_india": 1,
+    "matched_skills": 1,
+    "missing_skills": 1,
+    "match_percentage": 1,
+    "recommendation": 1,
+    "created_at": 1,
+    "scan_id": 1,
+    "scan_timestamp": 1,
+    "is_latest_scan": 1,
+    "already_seen": 1,
+    "has_apply_url": 1,
+    "is_easy_apply_possible": 1,
+    "job_quality_score": 1,
+    "is_suspicious": 1,
+    "quality_flags": 1,
+    "status": 1,
+}
+
+
+def clear_latest_scan_jobs_cache() -> None:
+    _latest_scan_jobs_cache.set(None)
+    _analytics_jobs_cache.set(None)
+
+
+async def prime_analytics_job_caches() -> None:
+    """Warm per-request job caches before parallel analytics sections run."""
+    from app.services.career_analytics._constants import ANALYTICS_HISTORY_SAMPLE
+
+    await get_latest_scan_jobs()
+    await get_all_jobs(limit=ANALYTICS_HISTORY_SAMPLE)
 
 # Sort: match % → quality score → remote priority → recency
 JOB_SORT_ORDER = [
@@ -80,15 +145,9 @@ def _scoped_query(extra: dict[str, Any] | None = None) -> dict[str, Any]:
 
 
 async def ensure_job_indexes() -> None:
-    collection = _get_jobs_collection()
-    await collection.create_index("user_id")
-    await collection.create_index([("user_id", 1), ("is_latest_scan", 1)])
-    await collection.create_index([("user_id", 1), ("apply_url", 1)])
-    await collection.create_index([("user_id", 1), ("title", 1), ("company", 1)])
-    await collection.create_index([("user_id", 1), ("created_at", -1)])
-    await collection.create_index([("user_id", 1), ("match_percentage", -1)])
-    await collection.create_index([("user_id", 1), ("source", 1)])
-    await collection.create_index([("user_id", 1), ("status", 1)])
+    from app.db.indexes import ensure_collection_indexes
+
+    await ensure_collection_indexes(JOBS_COLLECTION)
 
 
 def _document_from_create(job_data: JobCreate) -> dict[str, Any]:
@@ -201,6 +260,7 @@ def rank_job_candidate(
 
 async def start_new_scan_session() -> None:
     """Archive the previous latest scan batch; mark those jobs as already seen."""
+    clear_latest_scan_jobs_cache()
     try:
         collection = _get_jobs_collection()
         result = await collection.update_many(
@@ -378,22 +438,39 @@ async def get_unified_jobs_feed(
 
 
 async def get_latest_scan_jobs() -> list[JobDocument]:
-    """Return only the current latest scan batch (max 50), prioritized."""
-    try:
-        collection = _get_jobs_collection()
-        cursor = (
-            collection.find(_scoped_query({"is_latest_scan": True}))
-            .sort(JOB_SORT_ORDER)
-            .limit(SCAN_BATCH_LIMIT)
-        )
-        documents = await cursor.to_list(length=SCAN_BATCH_LIMIT)
-        jobs = [JobDocument.from_mongo(doc) for doc in documents]
-        return sort_job_documents(jobs)
-    except RuntimeError as exc:
-        raise JobServiceError("Database is not available") from exc
-    except Exception as exc:
-        logger.exception("Failed to fetch latest scan jobs")
-        raise JobServiceError("Failed to fetch latest scan jobs") from exc
+    """Return only the current latest scan batch (max 200), prioritized."""
+    cached = _latest_scan_jobs_cache.get()
+    if cached is not None:
+        return cached
+
+    async with _latest_scan_jobs_lock:
+        cached = _latest_scan_jobs_cache.get()
+        if cached is not None:
+            return cached
+
+        try:
+            collection = _get_jobs_collection()
+            query = _scoped_query({"is_latest_scan": True})
+            await explain_find_if_debug(collection, query, sort=list(JOB_SORT_ORDER))
+            cursor = (
+                collection.find(query, JOB_READ_PROJECTION)
+                .sort(JOB_SORT_ORDER)
+                .limit(SCAN_BATCH_LIMIT)
+            )
+            documents = await timed_to_list(
+                cursor,
+                operation="find_latest_scan_jobs",
+                collection=JOBS_COLLECTION,
+                max_length=SCAN_BATCH_LIMIT,
+            )
+            jobs = sort_job_documents([JobDocument.from_mongo(doc) for doc in documents])
+            _latest_scan_jobs_cache.set(jobs)
+            return jobs
+        except RuntimeError as exc:
+            raise JobServiceError("Database is not available") from exc
+        except Exception as exc:
+            logger.exception("Failed to fetch latest scan jobs")
+            raise JobServiceError("Failed to fetch latest scan jobs") from exc
 
 
 async def get_job_history(
@@ -409,8 +486,18 @@ async def get_job_history(
         collection = _get_jobs_collection()
         query = _scoped_query()
         total = await collection.count_documents(query)
-        cursor = collection.find(query).sort("created_at", -1).skip(skip).limit(limit)
-        documents = await cursor.to_list(length=limit)
+        cursor = (
+            collection.find(query, JOB_READ_PROJECTION)
+            .sort("created_at", -1)
+            .skip(skip)
+            .limit(limit)
+        )
+        documents = await timed_to_list(
+            cursor,
+            operation="find_job_history",
+            collection=JOBS_COLLECTION,
+            max_length=limit,
+        )
         items = [JobHistoryItem.from_mongo(doc) for doc in documents]
         return items, total
     except RuntimeError as exc:
@@ -420,19 +507,44 @@ async def get_job_history(
         raise JobServiceError("Failed to fetch job history") from exc
 
 
-async def get_all_jobs() -> list[JobDocument]:
-    """Return full job history (admin/debug use)."""
-    try:
-        collection = _get_jobs_collection()
-        cursor = collection.find(_scoped_query()).sort(JOB_SORT_ORDER)
-        documents = await cursor.to_list(length=None)
-        jobs = [JobDocument.from_mongo(doc) for doc in documents]
-        return sort_job_documents(jobs)
-    except RuntimeError as exc:
-        raise JobServiceError("Database is not available") from exc
-    except Exception as exc:
-        logger.exception("Failed to list jobs")
-        raise JobServiceError("Failed to list jobs") from exc
+async def get_all_jobs(*, limit: int | None = None) -> list[JobDocument]:
+    """Return job history for analytics (optional cap to avoid full collection scans)."""
+    cap = limit
+    if cap is None:
+        cap = int(getattr(settings, "MONGO_ANALYTICS_HISTORY_LIMIT", ANALYTICS_HISTORY_LIMIT))
+
+    cached_entry = _analytics_jobs_cache.get()
+    if cached_entry is not None and cached_entry[0] == cap:
+        return cached_entry[1]
+
+    async with _analytics_jobs_lock:
+        cached_entry = _analytics_jobs_cache.get()
+        if cached_entry is not None and cached_entry[0] == cap:
+            return cached_entry[1]
+
+        try:
+            collection = _get_jobs_collection()
+            query = _scoped_query()
+            await explain_find_if_debug(collection, query, sort=list(JOB_SORT_ORDER))
+            cursor = (
+                collection.find(query, JOB_READ_PROJECTION)
+                .sort(JOB_SORT_ORDER)
+                .limit(cap)
+            )
+            documents = await timed_to_list(
+                cursor,
+                operation="find_all_jobs",
+                collection=JOBS_COLLECTION,
+                max_length=cap,
+            )
+            jobs = sort_job_documents([JobDocument.from_mongo(doc) for doc in documents])
+            _analytics_jobs_cache.set((cap, jobs))
+            return jobs
+        except RuntimeError as exc:
+            raise JobServiceError("Database is not available") from exc
+        except Exception as exc:
+            logger.exception("Failed to list jobs")
+            raise JobServiceError("Failed to list jobs") from exc
 
 
 async def _resolve_resume_for_scan(resume_id: str | None):
@@ -451,17 +563,30 @@ async def _resolve_resume_for_scan(resume_id: str | None):
     return resumes[0]
 
 
-async def discover_and_store_jobs(resume_id: str | None = None) -> ScanFetchResponse:
+ProviderCompleteCallback = Callable[[str, str, int, str], None]
+PhaseCallback = Callable[[str, int], None]
+
+
+async def discover_and_store_jobs(
+    resume_id: str | None = None,
+    *,
+    scan_id: str | None = None,
+    on_provider_complete: ProviderCompleteCallback | None = None,
+    on_phase: PhaseCallback | None = None,
+) -> ScanFetchResponse:
     """
     Run a new scan session: fetch, score, match, rank, store up to 200 fresh jobs.
     Previous MongoDB history is preserved; only latest scan is active in the feed.
     """
-    scan_id = generate_scan_id()
+    scan_id = scan_id or generate_scan_id()
     scan_timestamp = _utc_now_iso()
 
     await start_new_scan_session()
 
-    fetch_result = await fetch_public_jobs_async()
+    if on_phase:
+        on_phase("fetching", 10)
+
+    fetch_result = await fetch_public_jobs_async(on_provider_complete=on_provider_complete)
     normalized_jobs = fetch_result.jobs
     filtered_out = fetch_result.filtered_rejected
     aggregation = fetch_result.aggregation
@@ -496,6 +621,9 @@ async def discover_and_store_jobs(resume_id: str | None = None) -> ScanFetchResp
                 )
         if provider_batch:
             await emit_provider_batch(user_id, providers=provider_batch, scan_id=scan_id)
+
+    if on_phase:
+        on_phase("processing", 65)
 
     latest_resume = await _resolve_resume_for_scan(resume_id)
     from app.services.application_service import was_job_already_applied
@@ -553,6 +681,9 @@ async def discover_and_store_jobs(resume_id: str | None = None) -> ScanFetchResp
     )
     top_candidates = ranked_candidates[:SCAN_BATCH_LIMIT]
 
+    if on_phase:
+        on_phase("storing", 85)
+
     stored_count = 0
     for candidate in top_candidates:
         job_payload = build_job_create(
@@ -603,6 +734,11 @@ async def discover_and_store_jobs(resume_id: str | None = None) -> ScanFetchResp
             stored=stored_count,
             matched=len(matched_candidates),
         )
+        from app.services.cache_invalidation import invalidate_after_scan_complete
+
+        invalidate_after_scan_complete(user_id)
+
+    clear_latest_scan_jobs_cache()
 
     return ScanFetchResponse(
         scan_id=scan_id,
@@ -632,12 +768,16 @@ async def fetch_and_merge_linkedin_jobs(
     if not is_session_ready("linkedin"):
         return LinkedInFetchResponse(
             status="session_invalid",
-            message="LinkedIn session not ready. Prepare a session on the Automation page.",
+            message=(
+                "LinkedIn isn't connected yet. Open Scans & Automation → Automation "
+                "and complete the one-time Career Lens setup."
+            ),
             session_valid=False,
         )
 
     resume = await _resolve_resume_for_scan(resume_id)
     search_keywords = build_search_keywords(resume)
+    from app.services.application_service import was_job_already_applied
 
     adapter = LinkedInPlaywrightJobSource()
     try:
@@ -672,6 +812,7 @@ async def fetch_and_merge_linkedin_jobs(
         scan_timestamp = _utc_now_iso()
 
     skipped = 0
+    matched_candidates: list[dict[str, Any]] = []
     for job in filtered_jobs:
         if await was_job_already_applied(
             job["apply_url"],
@@ -695,7 +836,7 @@ async def fetch_and_merge_linkedin_jobs(
         )
         matched_candidates.append(rank_job_candidate(job, analysis))
 
-    ranked_candidates, quality_rejected = filter_jobs_by_quality(matched_candidates)
+    ranked_candidates, quality_rejected = score_jobs_with_quality(matched_candidates)
 
     stored_jobs: list[JobDocument] = []
     for candidate in ranked_candidates:
@@ -731,6 +872,12 @@ async def fetch_and_merge_linkedin_jobs(
         skipped,
         quality_rejected,
     )
+
+    user_id = get_request_user_id() or ""
+    if user_id and stored_jobs:
+        from app.services.cache_invalidation import invalidate_after_jobs_mutated
+
+        invalidate_after_jobs_mutated(user_id)
 
     return LinkedInFetchResponse(
         status=status,

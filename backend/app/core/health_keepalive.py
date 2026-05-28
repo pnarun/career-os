@@ -25,12 +25,21 @@ def _scheduler_status() -> str:
     return "stopped"
 
 
-def build_health_payload(*, service: str) -> dict[str, Any]:
+def build_health_payload(*, service: str, redis_connected: bool | None = None) -> dict[str, Any]:
     """No DB, no auth, no scans — minimal fields for keep-alive."""
+    if redis_connected is None:
+        try:
+            from app.services.cache_service import is_connected
+
+            redis_connected = is_connected()
+        except Exception:
+            redis_connected = False
+
     return {
         "status": "ok",
         "service": service,
         "scheduler": _scheduler_status(),
+        "redis_connected": bool(redis_connected),
     }
 
 
@@ -48,4 +57,57 @@ def get_cached_health_payload(
     payload = build_health_payload(service=service)
     _cache = payload
     _cache_at = now
+    return payload
+
+
+_detail_cache: dict[str, Any] | None = None
+_detail_cache_at: float = 0.0
+
+
+async def build_detailed_health_payload(*, service: str) -> dict[str, Any]:
+    """Expanded health for monitors and beta ops (cached briefly)."""
+    global _detail_cache, _detail_cache_at
+
+    from app.core.config import settings
+    from app.core.database import get_database
+    from app.observability.operational_metrics import observability_snapshot
+    from app.realtime.websocket_manager import realtime_manager
+    from app.services.beta_ops_service import provider_health_from_metrics, scan_subsystem_summary
+
+    now = time.monotonic()
+    if _detail_cache is not None and (now - _detail_cache_at) < 5.0:
+        return dict(_detail_cache)
+
+    base = build_health_payload(service=service)
+    mongo: dict[str, Any] = {"status": "unknown"}
+    try:
+        if not (settings.MONGO_URI or "").strip():
+            mongo = {"status": "not_configured"}
+        else:
+            db = get_database()
+            await db.command("ping")
+            mongo = {"status": "ok"}
+    except Exception as exc:
+        mongo = {"status": "down", "error": str(exc)[:120]}
+
+    obs = observability_snapshot()
+    overall = base.get("status", "ok")
+    if mongo.get("status") != "ok" or not base.get("redis_connected"):
+        overall = "degraded"
+
+    payload = {
+        **base,
+        "status": overall,
+        "mongodb": mongo,
+        "websocket": {
+            "status": "ok",
+            "connections": realtime_manager.total_connections(),
+        },
+        "scan_subsystem": scan_subsystem_summary(),
+        "providers": provider_health_from_metrics(),
+        "cache_hit_ratio": obs.get("cache_hit_ratio"),
+        "extension_min_version": settings.EXTENSION_MIN_VERSION,
+    }
+    _detail_cache = payload
+    _detail_cache_at = now
     return payload

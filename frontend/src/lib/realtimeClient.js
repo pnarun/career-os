@@ -20,6 +20,10 @@ export class RealtimeClient {
     this.pingTimer = null
   }
 
+  isOpen() {
+    return this.ws?.readyState === WebSocket.OPEN
+  }
+
   connect() {
     const token = getAccessToken()
     if (!token) return
@@ -36,6 +40,13 @@ export class RealtimeClient {
     ws.onopen = () => {
       this.reconnectAttempts = 0
       this._startPing()
+      this.handlers.forEach((handler) => {
+        try {
+          handler({ event: "connected" })
+        } catch {
+          /* ignore */
+        }
+      })
     }
 
     const emitDisconnected = () => {
@@ -87,6 +98,37 @@ export class RealtimeClient {
 
     ws.onerror = () => {
       ws.close()
+    }
+  }
+
+  _handleOffline = () => {
+    this.handlers.forEach((handler) => {
+      try {
+        handler({ event: "offline" })
+      } catch {
+        /* ignore */
+      }
+    })
+  }
+
+  _handleOnline = () => {
+    this.handlers.forEach((handler) => {
+      try {
+        handler({ event: "online" })
+      } catch {
+        /* ignore */
+      }
+    })
+    if (this.shouldConnect) this.connect()
+  }
+
+  watchNetwork() {
+    if (typeof window === "undefined") return () => {}
+    window.addEventListener("offline", this._handleOffline)
+    window.addEventListener("online", this._handleOnline)
+    return () => {
+      window.removeEventListener("offline", this._handleOffline)
+      window.removeEventListener("online", this._handleOnline)
     }
   }
 

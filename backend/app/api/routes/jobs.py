@@ -2,7 +2,11 @@ import logging
 
 from fastapi import APIRouter, HTTPException
 
+from app.core.config import settings
+from app.core.user_context import require_request_user_id
 from app.models.job import JobDocument, JobHistoryItem, ScanFetchResponse
+from app.services.cache_service import get_json, set_json
+from app.utils.cache_keys import jobs_feed_key
 from app.models.linkedin_fetch import LinkedInFetchResponse
 from app.models.unified_feed import UnifiedFeedResponse
 from app.services.job_service import (
@@ -67,6 +71,7 @@ async def list_job_history(
     page: int = 1,
     limit: int = 50,
 ) -> dict:
+    limit = min(max(1, limit), 100)
     """Return paginated job history (all scans, newest first)."""
     try:
         items, total = await get_job_history(page=page, limit=limit)
@@ -105,8 +110,26 @@ async def get_jobs_feed(
 ) -> UnifiedFeedResponse:
     """Return the unified multi-provider jobs feed from the latest scan."""
     provider_list = [p.strip() for p in providers.split(",")] if providers else None
+    filter_payload = {
+        "providers": provider_list,
+        "remote_only": remote_only,
+        "easy_apply_only": easy_apply_only,
+        "min_match": min_match,
+        "keyword": keyword,
+        "sort": sort,
+        "strong_matches_only": strong_matches_only,
+        "remote_high_match": remote_high_match,
+        "easy_apply_high_match": easy_apply_high_match,
+        "company": company,
+    }
+    user_id = require_request_user_id()
+    cache_key = jobs_feed_key(user_id, filters=filter_payload)
+    cached = get_json(cache_key)
+    if cached is not None:
+        return UnifiedFeedResponse(**cached)
+
     try:
-        return await get_unified_jobs_feed(
+        feed = await get_unified_jobs_feed(
             providers=provider_list,
             remote_only=remote_only,
             easy_apply_only=easy_apply_only,
@@ -118,6 +141,9 @@ async def get_jobs_feed(
             easy_apply_high_match=easy_apply_high_match,
             company=company,
         )
+        payload = feed.model_dump(mode="json")
+        set_json(cache_key, payload, settings.CACHE_RESPONSE_TTL)
+        return feed
     except JobServiceError as exc:
         logger.error("Failed to build unified jobs feed: %s", exc)
         raise HTTPException(

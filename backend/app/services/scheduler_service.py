@@ -159,6 +159,14 @@ async def _execute_scheduled_scan(preference_id: str) -> None:
                 preference_id,
             )
             return
+        from app.services.email_delivery_guard import scheduled_scan_recently_completed
+
+        if scheduled_scan_recently_completed(preferences):
+            logger.info(
+                "[SCHEDULED_SCAN_SKIPPED] preference_id=%s reason=recent_slot_completed",
+                preference_id,
+            )
+            return
         await run_daily_job_scan_automation(preference_id)
     except UserPreferencesServiceError as exc:
         logger.error(

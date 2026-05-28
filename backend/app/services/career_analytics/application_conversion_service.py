@@ -20,7 +20,8 @@ async def build_application_conversion_analytics() -> dict[str, Any]:
     collection = get_database()["applications"]
     from app.services.application_service import _scoped_query
 
-    documents = await collection.find(_scoped_query()).to_list(length=1000)
+    cursor = collection.find(_scoped_query(), {"status": 1, "source": 1, "match_score": 1}).limit(500)
+    documents = await cursor.to_list(length=500)
 
     jobs_viewed = len(jobs)
     saved = app_analytics.total_saved + sum(

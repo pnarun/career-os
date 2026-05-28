@@ -51,9 +51,31 @@ def session_exists(platform: str, user_id: str | None = None) -> bool:
     return path.is_file() and path.stat().st_size > 0
 
 
+def load_session_bundle(
+    platform: str, user_id: str | None = None
+) -> dict[str, Any] | None:
+    """Storage state plus optional user_agent from Mongo (extension sync)."""
+    from app.services.browser_session_store import load_session_bundle_sync
+
+    key = normalize_platform(platform)
+    return load_session_bundle_sync(user_id=user_id, platform=key)
+
+
 def load_session(platform: str, user_id: str | None = None) -> dict[str, Any] | None:
     """Load Playwright storage state JSON for a platform, or None if missing."""
-    path = _session_path(platform, user_id)
+    bundle = load_session_bundle(platform, user_id)
+    if bundle and isinstance(bundle.get("storage_state"), dict):
+        return bundle["storage_state"]
+
+    key = normalize_platform(platform)
+    from app.services.browser_session_store import load_storage_state_sync
+
+    data = load_storage_state_sync(user_id=user_id, platform=key)
+    if data is not None:
+        logger.info("[AUTOMATION][SESSION] loaded platform=%s user=%s", key, user_id or "legacy")
+        return data
+
+    path = _session_path(key, user_id)
     if not path.is_file():
         logger.info("[AUTOMATION][SESSION] no session file platform=%s", platform)
         return None

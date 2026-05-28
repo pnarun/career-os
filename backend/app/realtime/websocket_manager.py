@@ -6,6 +6,12 @@ from typing import Any
 
 from fastapi import WebSocket
 
+from app.core.metrics import metrics
+from app.observability.operational_metrics import (
+    record_websocket_connected,
+    record_websocket_disconnected,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -24,10 +30,13 @@ class RealtimeConnectionManager:
         await websocket.accept()
         async with self._lock:
             self._connections[user_id].add(websocket)
+        count = len(self._connections[user_id])
+        metrics.set_gauge("websocket_active_connections", float(self.total_connections()))
+        record_websocket_connected(user_id, count)
         logger.info(
             "[REALTIME] user=%s connected (total=%d)",
             user_id,
-            len(self._connections[user_id]),
+            count,
             extra={"user_id": user_id},
         )
 
@@ -36,6 +45,8 @@ class RealtimeConnectionManager:
             self._connections[user_id].discard(websocket)
             if not self._connections[user_id]:
                 del self._connections[user_id]
+        metrics.set_gauge("websocket_active_connections", float(self.total_connections()))
+        record_websocket_disconnected(user_id)
         logger.info("[REALTIME] user=%s disconnected", user_id)
 
     def connection_count(self, user_id: str) -> int:
@@ -75,7 +86,7 @@ realtime_manager = RealtimeConnectionManager()
 
 
 async def publish_user_event(user_id: str, event: str, **data: Any) -> int:
-    """Publish a lightweight event to all sockets for a user."""
+    """Publish a lightweight event to all sockets for a user (Redis fan-out when enabled)."""
     if not user_id:
         return 0
     payload: dict[str, Any] = {
@@ -83,4 +94,10 @@ async def publish_user_event(user_id: str, event: str, **data: Any) -> int:
         "timestamp": _utc_now_iso(),
         **data,
     }
-    return await realtime_manager.send_to_user(user_id, payload)
+    metrics.incr("realtime_events_total")
+    metrics.incr(f"realtime_event_{event}")
+    # Lazy import avoids circular dependency with redis_bridge → websocket_manager
+    from app.realtime.redis_bridge import publish_realtime_event
+
+    await publish_realtime_event(user_id, payload)
+    return realtime_manager.connection_count(user_id)

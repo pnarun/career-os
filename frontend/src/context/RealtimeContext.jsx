@@ -9,13 +9,15 @@ import {
 } from "react"
 
 import { useAuth } from "@/context/AuthContext"
+import { wsPayloadToScanStatus } from "@/lib/scanRealtime"
 import { realtimeClient } from "@/lib/realtimeClient"
 
 const MAX_TIMELINE = 80
 const MAX_TOASTS = 5
 const FEED_BUMP_DEBOUNCE_MS = 450
 
-const ConnectionContext = createContext({ connected: false })
+const ConnectionContext = createContext({ connected: false, networkOnline: true })
+const ActiveScansContext = createContext({})
 const FeedVersionContext = createContext(0)
 const NotificationVersionContext = createContext(0)
 const TimelineContext = createContext({
@@ -28,15 +30,22 @@ const ToastContext = createContext({
   dismissToast: () => {},
 })
 
-export function RealtimeProvider({ children }) {
+export function RealtimeProvider({ children, suspendOnPublicPages = false }) {
   const { isAuthenticated } = useAuth()
   const [connected, setConnected] = useState(false)
+  const [networkOnline, setNetworkOnline] = useState(
+    () => typeof navigator === "undefined" || navigator.onLine !== false
+  )
+  const [activeScans, setActiveScans] = useState({})
   const [timeline, setTimeline] = useState([])
   const [toasts, setToasts] = useState([])
   const [feedVersion, setFeedVersion] = useState(0)
   const [notificationVersion, setNotificationVersion] = useState(0)
   const scanActiveRef = useRef(false)
   const feedBumpTimerRef = useRef(null)
+  const hadLiveConnectionRef = useRef(false)
+  const suspendRef = useRef(suspendOnPublicPages)
+  suspendRef.current = suspendOnPublicPages
 
   const pushTimeline = useCallback((entry) => {
     setTimeline((prev) => [...prev.slice(-(MAX_TIMELINE - 1)), entry])
@@ -73,11 +82,20 @@ export function RealtimeProvider({ children }) {
 
       if (event === "connected") {
         setConnected(true)
+        hadLiveConnectionRef.current = true
         return
       }
 
       if (event === "disconnected") {
         setConnected(false)
+        if (hadLiveConnectionRef.current) {
+          pushToast({
+            title: "Live updates paused",
+            message:
+              "Reconnecting automatically. Your scan keeps running — refresh if the page feels stuck.",
+          })
+          hadLiveConnectionRef.current = false
+        }
         return
       }
 
@@ -102,6 +120,7 @@ export function RealtimeProvider({ children }) {
         "scan_completed",
         "scan_failed",
         "provider_started",
+        "provider_completed",
         "provider_status",
         "jobs_fetched",
         "ai_scoring_complete",
@@ -150,20 +169,31 @@ export function RealtimeProvider({ children }) {
       return undefined
     }
 
+    // Public pages (e.g. /privacy-policy): keep an existing socket; do not open a new one
+    if (suspendOnPublicPages) {
+      return undefined
+    }
+
     const unsub = realtimeClient.subscribe(handleEvent)
     realtimeClient.connect()
 
     return () => {
       unsub()
-      realtimeClient.disconnect()
-      setConnected(false)
+      if (!suspendRef.current) {
+        realtimeClient.disconnect()
+        setConnected(false)
+      }
       if (feedBumpTimerRef.current) {
         window.clearTimeout(feedBumpTimerRef.current)
       }
     }
-  }, [isAuthenticated, handleEvent])
+  }, [isAuthenticated, handleEvent, suspendOnPublicPages])
 
-  const connectionValue = useMemo(() => ({ connected }), [connected])
+  const connectionValue = useMemo(
+    () => ({ connected, networkOnline }),
+    [connected, networkOnline]
+  )
+  const activeScansValue = useMemo(() => activeScans, [activeScans])
   const timelineValue = useMemo(
     () => ({
       timeline,
@@ -179,13 +209,15 @@ export function RealtimeProvider({ children }) {
 
   return (
     <ConnectionContext.Provider value={connectionValue}>
-      <FeedVersionContext.Provider value={feedVersion}>
-        <NotificationVersionContext.Provider value={notificationVersion}>
-          <TimelineContext.Provider value={timelineValue}>
-            <ToastContext.Provider value={toastValue}>{children}</ToastContext.Provider>
-          </TimelineContext.Provider>
-        </NotificationVersionContext.Provider>
-      </FeedVersionContext.Provider>
+      <ActiveScansContext.Provider value={activeScansValue}>
+        <FeedVersionContext.Provider value={feedVersion}>
+          <NotificationVersionContext.Provider value={notificationVersion}>
+            <TimelineContext.Provider value={timelineValue}>
+              <ToastContext.Provider value={toastValue}>{children}</ToastContext.Provider>
+            </TimelineContext.Provider>
+          </NotificationVersionContext.Provider>
+        </FeedVersionContext.Provider>
+      </ActiveScansContext.Provider>
     </ConnectionContext.Provider>
   )
 }
@@ -232,4 +264,14 @@ export function useRealtimeToasts() {
 
 export function useRealtimeConnection() {
   return useContext(ConnectionContext)
+}
+
+/** Live scan status keyed by scan_id (from WebSocket). */
+export function useActiveScans() {
+  return useContext(ActiveScansContext)
+}
+
+export function useActiveScan(scanId) {
+  const scans = useContext(ActiveScansContext)
+  return scanId ? scans[scanId] : undefined
 }

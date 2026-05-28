@@ -10,6 +10,8 @@ In **Render → career-os → Settings → Health Checks**:
 
 Click **Edit**, enter `/health`, save.
 
+For deeper diagnostics during beta, use `GET /health?detail=1` (Mongo, WebSocket, scans, providers) and `GET /system/beta-ops` (HTML) or `/system/beta-ops/json`. See [Beta readiness](../beta/beta-readiness.md).
+
 ### Does this replace UptimeRobot?
 
 | Feature | Render health check | UptimeRobot HEAD `/health` |
@@ -22,6 +24,22 @@ Click **Edit**, enter `/health`, save.
 
 1. Render health path = `/health` (recovery if process dies)
 2. UptimeRobot = `HEAD https://YOUR-API.onrender.com/health` every 5 min (reduce cold starts)
+
+### Developer status dashboard
+
+Embed your public UptimeRobot page on the API (same pattern as `/logs`):
+
+| URL | Purpose |
+|-----|---------|
+| `GET /uptime` | Developer hub — live API health + link to UptimeRobot (embedding is blocked by UptimeRobot) |
+| `GET /uptime/go` | Redirect to [your status page](https://stats.uptimerobot.com/rIhbIgCMm7) |
+| `GET /system/uptime` | OpenAPI alias for `/uptime` |
+
+```env
+UPTIMEROBOT_STATUS_PAGE_URL=https://stats.uptimerobot.com/rIhbIgCMm7
+```
+
+Local: `http://localhost:8001/uptime` · Production: `https://YOUR-API.onrender.com/uptime`
 
 Blueprint already sets `healthCheckPath: /health` in `render.yaml`; existing services may need a manual update in the dashboard.
 

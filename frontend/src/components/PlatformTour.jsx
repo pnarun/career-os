@@ -11,6 +11,7 @@ import {
   X,
 } from "lucide-react"
 
+import { CareerOsLogo } from "@/components/brand/CareerOsLogo"
 import { useAuth } from "@/context/AuthContext"
 import { useResumeOnboarding } from "@/context/ResumeOnboardingContext"
 import { Button } from "@/components/ui/button"
@@ -88,7 +89,7 @@ const STEPS = [
     icon: Radar,
     title: "Scans & Automation",
     description:
-      "Run scans on a schedule, watch live execution, manage browser login sessions, and receive high-match alerts.",
+      "Run job scans, connect LinkedIn once with Career Lens, and get alerts when great matches arrive.",
     navTarget: "operations-hub",
     location: "Sidebar → Scans & Automation (Scans · Automation · Notifications)",
   },
@@ -251,9 +252,13 @@ export function PlatformTour({ onNavigate }) {
         >
           <div className="mb-4 flex items-start justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-md shadow-indigo-500/30">
-                <StepIcon className="size-5" />
-              </div>
+              {step.id === "welcome" ? (
+                <CareerOsLogo variant="symbol" size="sm" />
+              ) : (
+                <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-md shadow-indigo-500/30">
+                  <StepIcon className="size-5" />
+                </div>
+              )}
               <div>
                 <p className="text-xs font-medium uppercase tracking-wide text-indigo-300">
                   Platform tour · {stepIndex + 1} of {STEPS.length}

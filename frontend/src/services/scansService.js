@@ -57,6 +57,8 @@ export async function loadScanCenterData() {
 
 function buildScanHistory(sessions, runs, preferences) {
   const rows = []
+  let sessionIndex = 0
+  let runIndex = 0
 
   for (const session of sessions) {
     const providers = Object.keys(session.sources || session.source_breakdown || {}).filter(
@@ -69,8 +71,15 @@ function buildScanHistory(sessions, runs, preferences) {
         ? "Failed"
         : "Success"
 
+    const sessionKey =
+      session.scan_id ||
+      session.id ||
+      session.scan_timestamp ||
+      session.created_at ||
+      `idx-${sessionIndex}`
+    sessionIndex += 1
     rows.push({
-      id: session.scan_id || session.id,
+      id: `session:${sessionKey}:${session.created_at || session.scan_timestamp || sessionIndex}`,
       scanId: session.scan_id,
       started: session.scan_timestamp || session.created_at,
       duration: "—",
@@ -94,8 +103,10 @@ function buildScanHistory(sessions, runs, preferences) {
       failed: "Failed",
       running: "Running",
     }
+    const runKey = run.id || run.scan_id || run.started_at || `idx-${runIndex}`
+    runIndex += 1
     rows.push({
-      id: run.id,
+      id: `run:${runKey}:${run.started_at || runIndex}`,
       scanId: run.scan_id || run.id,
       started: run.started_at,
       duration: run.completed_at ? "completed" : "—",

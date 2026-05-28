@@ -11,13 +11,14 @@ from app.services.career_analytics._analytics_utils import (
     infer_primary_role,
     pct_change,
 )
+from app.services.career_analytics._constants import ANALYTICS_HISTORY_SAMPLE
 from app.services.job_service import get_all_jobs, get_latest_scan_jobs
 from app.services.scan_session_service import list_recent_scan_sessions
 
 
 async def build_market_trends() -> dict[str, Any]:
     jobs = await get_latest_scan_jobs()
-    all_jobs = await get_all_jobs()
+    all_jobs = await get_all_jobs(limit=ANALYTICS_HISTORY_SAMPLE)
     from app.core.user_context import get_request_user_id
 
     user_id = get_request_user_id() or ""

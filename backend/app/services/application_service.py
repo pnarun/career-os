@@ -350,9 +350,24 @@ async def get_application_by_job_id(job_id: str) -> ApplicationDocument | None:
     return ApplicationDocument.from_mongo(document)
 
 
+_APPLICATION_ANALYTICS_PROJECTION = {
+    "_id": 1,
+    "status": 1,
+    "source": 1,
+    "match_score": 1,
+    "applied_at": 1,
+    "updated_at": 1,
+}
+
+
 async def build_application_analytics() -> ApplicationAnalytics:
     collection = _get_collection()
-    documents = await collection.find(_scoped_query()).to_list(length=1000)
+    cursor = (
+        collection.find(_scoped_query(), _APPLICATION_ANALYTICS_PROJECTION)
+        .sort("updated_at", -1)
+        .limit(500)
+    )
+    documents = await cursor.to_list(length=500)
 
     total_saved = sum(1 for doc in documents if doc.get("status") == "saved")
     total_applied = sum(1 for doc in documents if doc.get("status") == "applied")

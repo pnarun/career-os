@@ -8,8 +8,22 @@ if (import.meta.env.PROD && !API_BASE_URL) {
   )
 }
 
+import { humanizeErrorMessage } from "@/lib/userFacingErrors"
+
 const ACCESS_KEY = "career_os_access_token"
 const REFRESH_KEY = "career_os_refresh_token"
+const REFRESH_RETRY_COOLDOWN_MS = 10_000
+
+export const AUTH_SESSION_EXPIRED_EVENT = "career-os:session-expired"
+
+let refreshInFlight = null
+let lastRefreshFailureAt = 0
+
+function notifySessionExpired() {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent(AUTH_SESSION_EXPIRED_EVENT))
+  }
+}
 
 export function getApiBaseUrl() {
   return API_BASE_URL
@@ -26,6 +40,7 @@ export function getRefreshToken() {
 export function setTokens({ accessToken, refreshToken }) {
   if (accessToken) localStorage.setItem(ACCESS_KEY, accessToken)
   if (refreshToken) localStorage.setItem(REFRESH_KEY, refreshToken)
+  lastRefreshFailureAt = 0
 }
 
 export function clearTokens() {
@@ -37,11 +52,13 @@ export async function parseErrorMessage(response) {
   try {
     const data = await response.json()
     const detail = data?.detail
-    if (typeof detail === "string") return detail
-    if (detail?.message) return detail.message
-    return data?.message ?? `Request failed (${response.status})`
+    let raw
+    if (typeof detail === "string") raw = detail
+    else if (detail?.message) raw = detail.message
+    else raw = data?.message ?? `Request failed (${response.status})`
+    return humanizeErrorMessage(raw)
   } catch {
-    return `Request failed (${response.status})`
+    return humanizeErrorMessage(`Request failed (${response.status})`)
   }
 }
 
@@ -66,6 +83,30 @@ export async function refreshAccessToken() {
   return data.access_token
 }
 
+async function refreshAccessTokenSingleFlight() {
+  if (refreshInFlight) return refreshInFlight
+  if (Date.now() - lastRefreshFailureAt < REFRESH_RETRY_COOLDOWN_MS) {
+    return null
+  }
+
+  refreshInFlight = (async () => {
+    const token = await refreshAccessToken()
+    if (!token) {
+      lastRefreshFailureAt = Date.now()
+      clearTokens()
+      return null
+    }
+    lastRefreshFailureAt = 0
+    return token
+  })()
+
+  try {
+    return await refreshInFlight
+  } finally {
+    refreshInFlight = null
+  }
+}
+
 /**
  * Authenticated fetch with automatic token refresh on 401.
  */
@@ -80,11 +121,20 @@ export async function apiFetch(path, options = {}) {
 
   let response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers })
 
-  if (response.status === 401 && getRefreshToken()) {
-    const newToken = await refreshAccessToken()
-    if (newToken) {
-      headers.set("Authorization", `Bearer ${newToken}`)
-      response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers })
+  if (response.status === 401) {
+    if (getRefreshToken()) {
+      const newToken = await refreshAccessTokenSingleFlight()
+      if (newToken) {
+        headers.set("Authorization", `Bearer ${newToken}`)
+        response = await fetch(`${API_BASE_URL}${path}`, {
+          ...options,
+          headers,
+          signal: options.signal,
+        })
+      }
+    }
+    if (response.status === 401) {
+      notifySessionExpired()
     }
   }
 

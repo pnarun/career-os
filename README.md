@@ -1,5 +1,9 @@
 # Career OS
 
+<p align="center">
+  <img src="frontend/public/career-os-logo.png" alt="Career OS" width="320" />
+</p>
+
 **By [ELVA Tech](https://elvatech.in)** · Part of **[Career Lens](https://career-lens.in)**
 
 Career OS is an AI-powered job search and career automation platform. It aggregates roles from multiple boards, scores them against your resume, runs scheduled scans, supports browser-based automation, and provides resume, interview, analytics, and copilot tooling from a single dashboard.
@@ -13,6 +17,8 @@ Career OS is an AI-powered job search and career automation platform. It aggrega
 | Developer onboarding | [docs/onboarding/developer-onboarding.md](docs/onboarding/developer-onboarding.md) |
 | System architecture | [docs/architecture/system-overview.md](docs/architecture/system-overview.md) |
 | Deploy (Vercel + Render) | [docs/deployment/render-vercel-deployment.md](docs/deployment/render-vercel-deployment.md) |
+| Beta launch checklist | [docs/beta/beta-readiness.md](docs/beta/beta-readiness.md) |
+| Career Lens extension | [docs/extension/extension-architecture.md](docs/extension/extension-architecture.md) |
 | API reference | [docs/api/api-reference.md](docs/api/api-reference.md) |
 | Troubleshooting | [docs/troubleshooting/common-issues.md](docs/troubleshooting/common-issues.md) |
 | Screenshots to capture | [docs/assets/README.md](docs/assets/README.md) |
@@ -49,6 +55,9 @@ Career OS is an AI-powered job search and career automation platform. It aggrega
 
 - **JWT auth** — Register, login, refresh tokens; password reset; Google OAuth extension point
 - **Public landing page** — Marketing site at `/` with sign-in flow
+- **Privacy policy** — Public `/privacy-policy` (fixed nav + scrollable sections; linked from landing and sidebar)
+- **Beta onboarding** — Welcome modal, Settings → Beta support, ops dashboards (`/system/beta-ops`)
+- **Career Lens extension** — Chrome MV3 bridge for LinkedIn session pairing (see `extension/`)
 - **Platform tour** — First-login walkthrough with “Don’t show again”
 - **PWA** — Install prompt and service worker (production)
 - **Profile & settings** — Preferences, provider priority, scan scheduling, notifications
@@ -57,7 +66,7 @@ Career OS is an AI-powered job search and career automation platform. It aggrega
 
 - **Redis** — Cache, rate limiting, Celery broker, realtime bridge
 - **Celery queues** — Scan, scoring, notification, analytics, and retry tasks
-- **Observability** — Structured logging, `/health`, `/system/status`, `/system/metrics`
+- **Observability** — Structured logging, `/health` (optional `?detail=1`), `/system/status`, `/system/metrics`, `/system/beta-ops`
 - **Resilience** — Retries, circuit breakers on aggregators, configurable rate limits
 - **Docker & CI** — Compose overlays for local/staging/production, frontend Dockerfile, GitHub Actions workflow
 - **Deploy assets** — `infra/` nginx, backup scripts, bootstrap and deploy helpers
@@ -68,6 +77,8 @@ Career OS is an AI-powered job search and career automation platform. It aggrega
 career-os/
 ├── frontend/          # React + Vite dashboard
 ├── backend/           # FastAPI API, workers, automation
+├── extension/         # Career Lens Chrome extension (LinkedIn pairing)
+├── docs/              # Engineering & product documentation portal
 ├── infra/             # Docker, nginx, CI, deployment scripts
 ├── docker-compose.yml # Redis (+ optional full stack profile)
 └── backend/.env.example

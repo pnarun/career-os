@@ -7,6 +7,8 @@ import {
   Settings2,
 } from "lucide-react"
 
+import { BetaSupportSection } from "@/components/settings/BetaSupportSection"
+import { PrivacyAutomationSection } from "@/components/settings/PrivacyAutomationSection"
 import { ProviderPriorityList } from "@/components/settings/ProviderPriorityList"
 import { TagCombobox } from "@/components/settings/TagCombobox"
 import { SlowLoadingFormHint, SlowLoadingPageCenter } from "@/components/SlowLoadingStatus"
@@ -456,6 +458,10 @@ export function Settings() {
               ))}
             </CardContent>
           </Card>
+
+          <PrivacyAutomationSection />
+
+          <BetaSupportSection />
 
           <Card>
             <CardHeader>

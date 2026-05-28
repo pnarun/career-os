@@ -6,10 +6,12 @@ import { clearSavedPage, readSavedPage, saveActivePage } from "@/lib/appNavigati
 import { useAuth } from "@/context/AuthContext"
 import { ResumeOnboardingProvider, useResumeOnboarding } from "@/context/ResumeOnboardingContext"
 import { DashboardLayout } from "@/layouts/DashboardLayout"
+import { BetaWelcomeModal } from "@/components/BetaWelcomeModal"
 import { PlatformTour } from "@/components/PlatformTour"
 import { ResumeOnboardingModal } from "@/components/ResumeOnboardingModal"
 import { RealtimeToastHost } from "@/components/RealtimeToastHost"
 import { PwaInstallPrompt } from "@/components/PwaInstallPrompt"
+import { isPublicStandaloneRoute } from "@/lib/publicRoutes"
 import { LandingPage } from "@/pages/LandingPage"
 
 const DashboardPage = lazy(() =>
@@ -64,7 +66,7 @@ function AppShell() {
 
   useEffect(() => {
     const { pathname } = window.location
-    if (pathname && pathname !== "/") {
+    if (pathname && pathname !== "/" && !isPublicStandaloneRoute(pathname)) {
       window.history.replaceState(null, "", "/")
     }
   }, [])
@@ -94,6 +96,7 @@ function AppShell() {
           renderPage(page)
         )}
       </Suspense>
+      <BetaWelcomeModal onNavigate={handleNavigate} />
       <PlatformTour onNavigate={handleNavigate} />
       <ResumeOnboardingModal onNavigate={handleNavigate} />
       <RealtimeToastHost />

@@ -2,7 +2,7 @@
 
 ## User-facing capabilities
 
-- **Unified jobs feed** — Multi-provider listings with match scores, filters, and virtualized grid
+- **Unified jobs feed** — Multi-provider listings with match scores, filters, and paginated grid (6 cards per page)
 - **Job Match** — Paste URL or description for instant resume fit analysis
 - **Manual scan** — Run now from Scans page
 - **Scheduled scans** — 6-hour or daily per preferences

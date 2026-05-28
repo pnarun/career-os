@@ -8,6 +8,7 @@ import logging
 from app.core.celery_app import celery_app
 from app.core.cache import cache_delete, cache_key
 from app.core.metrics import metrics
+from app.services.cache_invalidation import invalidate_after_analytics_refresh
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +23,7 @@ def refresh_career_insights_task(user_id: str) -> dict:
     metrics.incr("queue_analytics_started")
     cache_delete(cache_key("analytics", user_id))
     cache_delete(cache_key("copilot", "recommendations", user_id))
+    invalidate_after_analytics_refresh(user_id)
     logger.info(
         "Analytics cache invalidated user_id=%s",
         user_id,

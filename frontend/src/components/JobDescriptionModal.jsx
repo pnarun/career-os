@@ -7,7 +7,7 @@ export function JobDescriptionModal({ job, open, onClose }) {
   if (!job) return null
 
   const description =
-    String(job.description || "").trim() ||
+    String(job.description_full || job.description || "").trim() ||
     `${job.title || "Role"} at ${job.company || "Company"}. Full description was not provided by the job source.`
 
   return (

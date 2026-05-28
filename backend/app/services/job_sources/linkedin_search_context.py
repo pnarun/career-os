@@ -121,6 +121,7 @@ def build_linkedin_discovery_payload(
     preferred_location: str | None = None,
     headless: bool = True,
     capture_screenshots: bool = False,
+    user_id: str | None = None,
 ) -> dict[str, Any]:
     keywords = build_search_keywords(
         resume, target_roles=target_roles, target_skills=target_skills
@@ -137,6 +138,7 @@ def build_linkedin_discovery_payload(
         "location": location,
         "headless": headless,
         "capture_screenshots": capture_screenshots,
+        "user_id": user_id or "",
     }
 
 
@@ -149,6 +151,7 @@ async def resolve_linkedin_discovery_payload(
     """Load resume from preferences or fallback and build worker payload."""
     from app.services.job_service import _resolve_resume_for_scan
     from app.services.user_preferences_service import get_preferences
+    from app.core.user_context import get_request_user_id
 
     effective_resume_id = resume_id
     target_roles: list[str] = []
@@ -174,4 +177,5 @@ async def resolve_linkedin_discovery_payload(
         preferred_location=preferred_location,
         headless=headless,
         capture_screenshots=capture_screenshots,
+        user_id=get_request_user_id(),
     )

@@ -19,9 +19,9 @@ import { SlowLoadingFormHint, SlowLoadingPageCenter, SlowLoadingPanel } from "@/
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
+import { useInterviewPrepJobs } from "@/hooks/useInterviewPrepJobs"
 import {
   completeMockSession,
-  getInterviewPrepJobs,
   getInterviewPrepOverview,
   recordPractice,
   scoreColor,
@@ -74,10 +74,8 @@ function QuestionList({ items, onPractice, jobId }) {
 }
 
 export function InterviewPrep() {
-  const [loading, setLoading] = useState(true)
   const [detailLoading, setDetailLoading] = useState(false)
   const [error, setError] = useState(null)
-  const [jobList, setJobList] = useState([])
   const [statusFilter, setStatusFilter] = useState("all")
   const [selectedJobId, setSelectedJobId] = useState("")
   const [data, setData] = useState(null)
@@ -86,27 +84,36 @@ export function InterviewPrep() {
   const [currentQ, setCurrentQ] = useState(0)
   const [timer, setTimer] = useState(0)
 
-  const loadJobs = useCallback(async (filter) => {
-    setLoading(true)
-    setError(null)
-    try {
-      const result = await getInterviewPrepJobs(filter)
-      setJobList(result.jobs || [])
-      if (result.jobs?.length > 0) {
-        setSelectedJobId((prev) =>
-          prev && result.jobs.some((j) => j.job_id === prev) ? prev : result.jobs[0].job_id
-        )
-      } else {
-        setSelectedJobId("")
-        setData(null)
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load jobs")
-      setJobList([])
-    } finally {
-      setLoading(false)
+  const {
+    data: jobList = [],
+    isLoading: jobsLoading,
+    isError: jobsError,
+    error: jobsFetchError,
+    refetch: refetchJobs,
+  } = useInterviewPrepJobs(statusFilter)
+
+  const loading = jobsLoading && jobList.length === 0
+
+  useEffect(() => {
+    if (jobsError) {
+      setError(
+        jobsFetchError instanceof Error ? jobsFetchError.message : "Failed to load jobs"
+      )
+      return
     }
-  }, [])
+    if (jobList.length > 0) {
+      setSelectedJobId((prev) =>
+        prev && jobList.some((j) => j.job_id === prev) ? prev : jobList[0].job_id
+      )
+    } else if (!jobsLoading) {
+      setSelectedJobId("")
+      setData(null)
+    }
+  }, [jobList, jobsLoading, jobsError, jobsFetchError])
+
+  const loadJobs = useCallback(() => {
+    void refetchJobs()
+  }, [refetchJobs])
 
   const loadOverview = useCallback(async (jobId) => {
     if (!jobId) {
@@ -125,10 +132,6 @@ export function InterviewPrep() {
       setDetailLoading(false)
     }
   }, [])
-
-  useEffect(() => {
-    loadJobs(statusFilter)
-  }, [statusFilter, loadJobs])
 
   useEffect(() => {
     if (selectedJobId) loadOverview(selectedJobId)

@@ -6,7 +6,7 @@ import {
   Sparkles,
   TrendingUp,
 } from "lucide-react"
-import { useCallback, useEffect, useState } from "react"
+import { useState } from "react"
 
 import {
   AtsScoreGauge,
@@ -24,10 +24,10 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
+import { useResumeAiOverview } from "@/hooks/useResumeAiOverview"
 import {
   downloadExportResult,
   exportResume,
-  getResumeAiOverview,
   scoreColor,
 } from "@/services/resumeAiService"
 
@@ -44,27 +44,24 @@ function SectionCard({ title, description, children, className }) {
 }
 
 export function ResumeAI() {
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
-  const [data, setData] = useState(null)
   const [exporting, setExporting] = useState(null)
+  const [exportError, setExportError] = useState(null)
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const overview = await getResumeAiOverview()
-      setData(overview)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load Resume AI")
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  const {
+    data,
+    isLoading,
+    isError,
+    error: fetchError,
+    refetch,
+  } = useResumeAiOverview()
 
-  useEffect(() => {
-    load()
-  }, [load])
+  const loading = isLoading && !data
+  const error =
+    (isError && fetchError instanceof Error ? fetchError.message : null) || exportError
+
+  const load = () => {
+    void refetch()
+  }
 
   const onExport = async (format) => {
     if (!data?.resume_id) return
@@ -73,7 +70,7 @@ export function ResumeAI() {
       const result = await exportResume({ resume_id: data.resume_id, format })
       downloadExportResult(result)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Export failed")
+      setExportError(err instanceof Error ? err.message : "Export failed")
     } finally {
       setExporting(null)
     }

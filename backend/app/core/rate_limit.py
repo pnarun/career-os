@@ -25,6 +25,10 @@ RATE_LIMIT_RULES: dict[str, tuple[int, int]] = {
     "/run-scan-now": (6, 60),
     "/fetch-jobs": (10, 60),
     "/fetch-linkedin": (5, 60),
+    "/automation/linkedin/connect-with-code": (8, 300),
+    "/automation/linkedin/resync": (20, 60),
+    "/automation/linkedin/pairing-code": (6, 300),
+    "/scans/run": (6, 60),
 }
 
 

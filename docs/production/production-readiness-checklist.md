@@ -39,7 +39,7 @@ Use before launch, major releases, or investor demos.
 ## Performance
 
 - [ ] Cold start &lt; 90s acceptable for demo
-- [ ] Jobs feed virtualized — no DOM freeze on 500+ rows
+- [ ] Jobs feed paginated (6 cards/page) — no overlap or DOM freeze on large feeds
 - [ ] Playwright Docker build succeeds on Render
 - [ ] `WEB_CONCURRENCY=1` if memory constrained
 
@@ -59,7 +59,7 @@ Use before launch, major releases, or investor demos.
 
 ## Legal / product
 
-- [ ] Privacy policy link (if public)
+- [ ] Privacy policy live at `/privacy-policy` (landing footer + sidebar; extension `config.js` URL matches prod)
 - [ ] Terms for automation / third-party boards
 - [ ] Career Lens / ELVA Tech branding correct in footer
 

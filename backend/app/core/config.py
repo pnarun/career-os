@@ -1,5 +1,6 @@
 import os
 from functools import lru_cache
+import sys
 from typing import Literal
 
 from pydantic import model_validator
@@ -86,14 +87,47 @@ class Settings(BaseSettings):
     CRON_SECRET: str = ""
 
     HEALTH_CACHE_SECONDS: float = 2.0
+    """Public UptimeRobot status page (embedded at GET /uptime for developers)."""
+    UPTIMEROBOT_STATUS_PAGE_URL: str = "https://stats.uptimerobot.com/rIhbIgCMm7"
+    """Public API base URL for absolute brand links in email (optional; Render sets RENDER_EXTERNAL_URL)."""
+    API_PUBLIC_URL: str = ""
+    """Optional Cloudinary CDN URLs (set after running scripts/upload_brand_logos.py)."""
+    BRAND_LOGO_FULL_URL: str = ""
+    BRAND_LOGO_BLACK_URL: str = ""
+    BRAND_LOGO_SYMBOL_URL: str = ""
     SCHEDULER_HEARTBEAT_ENABLED: bool = True
     """Run overdue scans once on process start (after sleep/deploy). Disable if you only rely on APScheduler slots."""
     SCHEDULER_STARTUP_CATCHUP: bool = True
+
+    # Upstash Redis REST (response caching)
+    UPSTASH_REDIS_REST_URL: str = ""
+    UPSTASH_REDIS_REST_TOKEN: str = ""
 
     # Cache TTLs (seconds)
     CACHE_PROVIDER_TTL: int = 300
     CACHE_ANALYTICS_TTL: int = 600
     CACHE_COPILOT_TTL: int = 300
+    CACHE_RESPONSE_TTL: int = 300  # dashboard, career analytics, scan summaries
+
+    # MongoDB performance
+    MONGO_SLOW_QUERY_MS: float = 500.0
+    MONGO_EXPLAIN_QUERIES: bool = False
+    MONGO_ANALYTICS_HISTORY_LIMIT: int = 1500
+
+    # Provider fetch resilience
+    PROVIDER_FETCH_TIMEOUT_SECONDS: float = 90.0
+    PROVIDER_FETCH_MAX_RETRIES: int = 1
+
+    # API observability
+    API_SLOW_REQUEST_MS: float = 1500.0
+
+    # Background scan state
+    SCAN_STALE_SECONDS: int = 7200
+
+    """Minimum Career Lens extension version accepted for connect/resync."""
+    EXTENSION_MIN_VERSION: str = "0.3.0"
+    WEBSOCKET_MAX_CONNECTIONS_PER_USER: int = 5
+    WEBSOCKET_MAX_CONNECTIONS_TOTAL: int = 200
 
     model_config = SettingsConfigDict(
         env_file=_env_files(),
@@ -127,6 +161,17 @@ class Settings(BaseSettings):
     def is_cloud_deploy(self) -> bool:
         """True on Render/Heroku-style hosts (auto CORS for Vercel frontends)."""
         return bool(os.getenv("RENDER")) or bool(os.getenv("RENDER_SERVICE_ID"))
+
+    @property
+    def headed_session_prep_available(self) -> bool:
+        """Interactive Prepare session (visible Chromium) — local backend only."""
+        if self.is_cloud_deploy:
+            return False
+        if sys.platform == "linux" and not (
+            os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")
+        ):
+            return False
+        return True
 
     @property
     def effective_cors_origins(self) -> list[str]:

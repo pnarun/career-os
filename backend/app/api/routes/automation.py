@@ -1,16 +1,25 @@
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 
 from app.automation.browser.screenshot_service import AUTOMATION_ROOT
+from app.auth.dependencies import get_current_user
 from app.models.automation import (
     BrowserHealthResponse,
     DeleteSessionResponse,
+    LinkedInConnectWithCodeRequest,
+    LinkedInConnectWithCodeResponse,
+    LinkedInConnectionStatusResponse,
+    LinkedInDisconnectResponse,
+    LinkedInResyncRequest,
+    LinkedInResyncResponse,
     LinkedInDiscoveryResponse,
+    LinkedInPairingCodeResponse,
     OpenSessionResponse,
     PrepareSessionDoneResponse,
     SessionStatusResponse,
+    PlatformSessionStatus,
     TestOpenRequest,
     TestOpenResponse,
     TestSessionResponse,
@@ -19,8 +28,13 @@ from app.services.automation_service import (
     check_browser_health,
     confirm_open_session_done,
     confirm_prepare_session_done,
+    connect_linkedin_with_pairing_code,
     delete_platform_session,
+    disconnect_linkedin,
+    generate_linkedin_pairing_code,
+    resync_linkedin_with_token,
     get_session_status,
+    get_linkedin_connection_status,
     open_platform_session,
     run_linkedin_discovery_test,
     test_open_url,
@@ -30,6 +44,7 @@ from app.services.automation_service import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["automation"])
+public_router = APIRouter(tags=["automation"])
 
 
 @router.get("/automation/browser-health", response_model=BrowserHealthResponse)
@@ -44,6 +59,90 @@ async def session_status() -> SessionStatusResponse:
     return get_session_status()
 
 
+@router.post(
+    "/automation/linkedin/pairing-code",
+    response_model=LinkedInPairingCodeResponse,
+)
+async def linkedin_pairing_code(
+    _user: dict = Depends(get_current_user),
+) -> LinkedInPairingCodeResponse:
+    """Generate 6-digit one-time pairing code (expires in 5 minutes)."""
+    try:
+        return await generate_linkedin_pairing_code()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail={"message": str(exc)}) from exc
+
+
+@public_router.post(
+    "/automation/linkedin/connect-with-code",
+    response_model=LinkedInConnectWithCodeResponse,
+)
+async def connect_linkedin_with_code(
+    payload: LinkedInConnectWithCodeRequest,
+) -> LinkedInConnectWithCodeResponse:
+    """Connect LinkedIn cookies using temporary pairing code (no JWT in extension)."""
+    from app.core.extension_version import extension_version_message, extension_version_ok
+
+    if not extension_version_ok(payload.extensionVersion):
+        raise HTTPException(
+            status_code=426,
+            detail={"message": extension_version_message(payload.extensionVersion)},
+        )
+    try:
+        return await connect_linkedin_with_pairing_code(
+            pairing_code=payload.pairingCode,
+            cookies=[cookie.model_dump() for cookie in payload.cookies],
+            user_agent=payload.userAgent,
+            extension_version=payload.extensionVersion,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail={"message": str(exc)}) from exc
+
+
+@public_router.post(
+    "/automation/linkedin/resync",
+    response_model=LinkedInResyncResponse,
+)
+async def resync_linkedin(payload: LinkedInResyncRequest) -> LinkedInResyncResponse:
+    """Silent extension resync using stored sync token (no pairing code)."""
+    from app.core.extension_version import extension_version_message, extension_version_ok
+
+    if not extension_version_ok(payload.extensionVersion):
+        raise HTTPException(
+            status_code=426,
+            detail={"message": extension_version_message(payload.extensionVersion)},
+        )
+    try:
+        return await resync_linkedin_with_token(
+            sync_token=payload.syncToken,
+            cookies=[cookie.model_dump() for cookie in payload.cookies],
+            user_agent=payload.userAgent,
+            extension_version=payload.extensionVersion,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail={"message": str(exc)}) from exc
+
+
+@router.post(
+    "/automation/linkedin/disconnect",
+    response_model=LinkedInDisconnectResponse,
+)
+async def linkedin_disconnect(
+    _user: dict = Depends(get_current_user),
+) -> LinkedInDisconnectResponse:
+    return await disconnect_linkedin()
+
+
+@router.get(
+    "/automation/linkedin/status",
+    response_model=LinkedInConnectionStatusResponse,
+)
+async def linkedin_connection_status(
+    _user: dict = Depends(get_current_user),
+) -> LinkedInConnectionStatusResponse:
+    return await get_linkedin_connection_status()
+
+
 @router.delete(
     "/automation/session/{platform}",
     response_model=DeleteSessionResponse,
@@ -51,7 +150,7 @@ async def session_status() -> SessionStatusResponse:
 async def remove_session(platform: str) -> DeleteSessionResponse:
     """Delete session JSON and metadata for a platform."""
     try:
-        return delete_platform_session(platform)
+        return await delete_platform_session(platform)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail={"message": str(exc)}) from exc
     except RuntimeError as exc:

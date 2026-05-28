@@ -6,9 +6,12 @@ import {
   Radar,
   Send,
   Settings,
+  Shield,
   X,
 } from "lucide-react"
 
+import { CareerOsLogo } from "@/components/brand/CareerOsLogo"
+import { privacyPolicyHref } from "@/lib/publicRoutes"
 import { cn } from "@/lib/utils"
 
 export type AppPage =
@@ -67,17 +70,16 @@ export function Sidebar({
       <div className="flex h-16 shrink-0 items-center justify-between gap-2 border-b border-sidebar-border px-4 sm:px-6">
         <button
           type="button"
-          className="flex min-w-0 flex-1 items-center gap-2 rounded-lg text-left transition-colors hover:bg-sidebar-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/50"
+          className="flex min-w-0 flex-1 flex-col items-start gap-1 rounded-lg text-left transition-colors hover:bg-sidebar-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/50"
           onClick={() => onNavigate("dashboard")}
           aria-label="Go to dashboard"
         >
-          <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-md shadow-indigo-500/30">
-            <Briefcase className="size-4" />
-          </div>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold tracking-tight">Career OS</p>
-            <p className="truncate text-xs text-muted-foreground">Find, match & land roles</p>
-          </div>
+          <CareerOsLogo
+            variant="full"
+            size="sm"
+            className="max-h-9 max-w-[11.5rem]"
+          />
+          <p className="truncate pl-0.5 text-xs text-muted-foreground">Find, match & land roles</p>
         </button>
         <button
           type="button"
@@ -120,6 +122,17 @@ export function Sidebar({
         })}
       </nav>
 
+      <div className="shrink-0 border-t border-sidebar-border p-3 sm:p-4">
+        <a
+          href={privacyPolicyHref()}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+        >
+          <Shield className="size-4 shrink-0" />
+          <span className="truncate">Privacy Policy</span>
+        </a>
+      </div>
     </aside>
   )
 }

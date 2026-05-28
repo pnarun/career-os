@@ -21,7 +21,9 @@ flowchart LR
 
 **Service:** `app/services/email_service.py`
 
-**Dedupe:** `user_preferences.last_email_sent_at` + `last_email_scan_id`
+**Branding:** Transactional HTML uses an **inline PNG** (`cid:career-os-logo-full`) from `backend/app/static/brand/` via `email_logo_inline_attachment()` in `app/core/brand_assets.py`. Remote logo URLs alone often break in Gmail when the host serves the SPA shell instead of a PNG. Optional CDN overrides: `BRAND_LOGO_FULL_URL` (see `scripts/upload_brand_logos.py`).
+
+**Dedupe:** `user_preferences.last_email_sent_at` + `last_email_scan_id` — one digest per completed scan (no duplicate blasts).
 
 ## Notification types
 

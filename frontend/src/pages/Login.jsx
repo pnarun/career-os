@@ -1,6 +1,7 @@
 import { useState } from "react"
-import { Briefcase, Loader2 } from "lucide-react"
+import { Loader2 } from "lucide-react"
 
+import { CareerOsLogo } from "@/components/brand/CareerOsLogo"
 import { useAuth } from "@/context/AuthContext"
 import { SlowLoadingFormHint } from "@/components/SlowLoadingStatus"
 import { Button } from "@/components/ui/button"
@@ -33,9 +34,7 @@ export function Login({ onSwitchToRegister }) {
     <div className="flex min-h-svh items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md border-border/80 shadow-lg">
         <CardHeader className="space-y-3 text-center">
-          <div className="mx-auto flex size-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
-            <Briefcase className="size-6" />
-          </div>
+          <CareerOsLogo variant="full" size="md" className="mx-auto" />
           <CardTitle className="text-2xl">Welcome back</CardTitle>
           <CardDescription>Sign in to your Career OS workspace</CardDescription>
         </CardHeader>

@@ -1,14 +1,16 @@
 /** @typedef {import('./jobLocationUtils').JobLike} JobLike */
 
+import { getProviderUserMessage } from "@/lib/userFacingErrors"
+
 export const PROVIDER_ERROR_LABELS = {
   none: "OK",
-  network_failure: "Network failure",
-  parsing_failure: "Parsing failure",
-  auth_required: "Login / session required",
-  rate_limit: "Rate limited",
-  selector_mismatch: "Selector / schema mismatch",
-  timeout: "Timeout",
-  unknown: "Unknown error",
+  network_failure: "Connection issue",
+  parsing_failure: "Couldn't read results",
+  auth_required: "Reconnect LinkedIn",
+  rate_limit: "Temporarily busy",
+  selector_mismatch: "Try again shortly",
+  timeout: "Taking longer than usual",
+  unknown: "Temporary issue",
 }
 
 const STATUS_STYLES = {
@@ -23,6 +25,15 @@ const STATUS_STYLES = {
  */
 export function getProviderErrorLabel(errorType) {
   return PROVIDER_ERROR_LABELS[errorType] || PROVIDER_ERROR_LABELS.unknown
+}
+
+/**
+ * Full user-facing explanation for provider failures.
+ * @param {string} errorType
+ * @param {string} [rawMessage]
+ */
+export function getProviderFriendlyMessage(errorType, rawMessage = "") {
+  return getProviderUserMessage(errorType, rawMessage)
 }
 
 /**

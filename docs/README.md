@@ -1,5 +1,9 @@
 # Career OS — Documentation Portal
 
+<p align="center">
+  <img src="./assets/ui/career-os-logo.png" alt="Career OS" width="280" />
+</p>
+
 **Organization:** [ELVA Tech](https://elvatech.in)  
 **Parent platform:** [Career Lens](https://career-lens.in)  
 **Product:** Career OS — AI-powered job discovery and career automation
@@ -15,6 +19,7 @@
 | Architecture review | [System overview](./architecture/system-overview.md) |
 | API integration | [API reference](./api/api-reference.md) |
 | Incidents | [Troubleshooting](./troubleshooting/common-issues.md) |
+| Beta / ops | [Beta readiness](./beta/beta-readiness.md) |
 | Investors / demos | [Product overview](./product/overview.md) |
 
 ---
@@ -25,6 +30,7 @@
 
 - [Product overview](./product/overview.md)
 - [Vision and goals](./product/vision-and-goals.md)
+- [Onboarding experience (trust & LinkedIn)](./product/onboarding-experience.md)
 - [UI walkthrough](./ui/ui-walkthrough.md)
 
 ### Architecture
@@ -54,6 +60,12 @@
 - [Resume matching engine](./automation/resume-matching-engine.md)
 - [APScheduler](./scheduling/apscheduler.md)
 
+### Browser extension
+
+- [Extension architecture](./extension/extension-architecture.md)
+- [Local development](./extension/local-development.md)
+- [Chrome Web Store plan](./extension/chrome-web-store-plan.md)
+
 ### Features
 
 - [Job discovery](./features/job-discovery.md)
@@ -61,6 +73,11 @@
 - [Interview prep](./features/interview-prep.md)
 - [Career analytics](./features/career-analytics.md)
 - [Email & notifications](./features/email-notifications.md)
+
+### Beta & legal
+
+- [Beta readiness checklist](./beta/beta-readiness.md)
+- Privacy policy (in-app): `/privacy-policy` — `frontend/src/pages/PrivacyPolicyPage.jsx`
 
 ### Deployment & operations
 

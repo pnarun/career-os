@@ -1,6 +1,7 @@
 import { useState } from "react"
 
 import { TabbedHub } from "@/components/layout/TabbedHub"
+import { useHubTabPrefetch } from "@/hooks/useHubTabPrefetch"
 import { ResumeUpload } from "@/pages/ResumeUpload"
 import { ResumeAI } from "@/pages/ResumeAI"
 
@@ -11,6 +12,7 @@ const TABS = [
 
 export function ResumeHub() {
   const [tab, setTab] = useState("upload")
+  useHubTabPrefetch("resume", tab)
 
   return (
     <TabbedHub

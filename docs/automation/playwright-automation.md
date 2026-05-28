@@ -27,6 +27,7 @@ flowchart LR
 | `app/automation/browser/browser_manager.py` | Async wrapper |
 | `app/automation/browser/session_manager.py` | Load/save `storage_state` JSON |
 | `app/automation/browser/prepare_signals.py` | UI “session ready” signals |
+| `app/services/browser_session_store.py` | Per-user MongoDB session store |
 | `app/automation/profiles/` | Session storage (gitignored except examples) |
 
 ## Commands (worker CLI)
@@ -63,8 +64,17 @@ Examples (see `sync_runner.py` for full list):
 ## Production (Render)
 
 - Chromium installed in Docker: `playwright install --with-deps chromium`
-- **Session files are ephemeral** on default disk — LinkedIn sessions lost on redeploy unless persistent disk added
+- Session source of truth is MongoDB `browser_sessions`; filesystem cache is best-effort fallback
 - First build may take **10+ minutes** due to browser deps
+
+## Extension session bridge
+
+Career Lens Chrome extension is the production session bridge:
+
+- Extension reads LinkedIn authenticated cookies from Chrome
+- Calls `POST /automation/linkedin/connect-with-code` using one-time 6-digit pairing code
+- Backend normalizes cookies into Playwright-compatible `storage_state`
+- Discovery worker loads per-user session from MongoDB
 
 ## Failure modes
 

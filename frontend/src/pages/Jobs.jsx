@@ -1,7 +1,11 @@
 import { memo, useCallback, useEffect, useMemo, useState } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import { useFeedVersion } from "@/context/RealtimeContext"
 import { useDebounce } from "@/hooks/useDebounce"
+import { useJobsFeed } from "@/hooks/useJobsFeed"
+import { useLatestScanAnalytics } from "@/hooks/useLatestScanAnalytics"
 import { VirtualizedJobGrid } from "@/components/VirtualizedJobGrid"
+import { queryKeys } from "@/lib/queryKeys"
 import {
   AlertCircle,
   Briefcase,
@@ -18,6 +22,7 @@ import {
   ShieldAlert,
 } from "lucide-react"
 
+import { EmptyState } from "@/components/EmptyState"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -40,14 +45,10 @@ import { JobDescriptionModal } from "@/components/JobDescriptionModal"
 import { JobDetailsModal } from "@/components/JobDetailsModal"
 import { ProviderFeedSummary } from "@/components/ProviderFeedSummary"
 import { ScanAnalyticsPanel } from "@/components/ScanAnalyticsPanel"
-import {
-  FEED_PROVIDER_OPTIONS,
-  FEED_SORT_OPTIONS,
-  getJobsFeed,
-} from "@/services/jobFeedService"
+import { ScanProgressPanel } from "@/components/scans/ScanProgressPanel"
+import { FEED_PROVIDER_OPTIONS, FEED_SORT_OPTIONS } from "@/services/jobFeedService"
 import { resolveScanSummary } from "@/utils/providerStatusUtils"
 import { fetchJobs, getMatchBadgeVariant } from "@/services/jobService"
-import { getLatestScanAnalytics } from "@/services/scanAnalyticsService"
 import {
   DEFAULT_LOCATION_FILTER,
   buildLocationSummary,
@@ -309,8 +310,10 @@ const JobCard = memo(function JobCard({ job, showScanMeta, showQualityDebug, onV
 })
 
 export function Jobs() {
+  const queryClient = useQueryClient()
   const [displayJobs, setDisplayJobs] = useState([])
   const [allFeedJobs, setAllFeedJobs] = useState([])
+  const [listPage, setListPage] = useState(1)
   const [historicalMode, setHistoricalMode] = useState(false)
   const [locationFilter, setLocationFilter] = useState(DEFAULT_LOCATION_FILTER)
   const [selectedProviders, setSelectedProviders] = useState([])
@@ -319,17 +322,12 @@ export function Jobs() {
   const [minMatch, setMinMatch] = useState(0)
   const [keyword, setKeyword] = useState("")
   const [sortBy, setSortBy] = useState("default")
-  const [feedMeta, setFeedMeta] = useState({
-    providers: {},
-    duplicates_removed: 0,
-    total_jobs: 0,
-  })
-  const [status, setStatus] = useState("idle")
   const [scanSummary, setScanSummary] = useState(null)
-  const [scanAnalytics, setScanAnalytics] = useState(null)
   const [error, setError] = useState(null)
   const [hasFetched, setHasFetched] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [scanProgressLabel, setScanProgressLabel] = useState("")
+  const [liveScanStatus, setLiveScanStatus] = useState(null)
   const [selectedJob, setSelectedJob] = useState(null)
   const [descriptionJob, setDescriptionJob] = useState(null)
   const [companyFilter, setCompanyFilter] = useState("")
@@ -339,7 +337,7 @@ export function Jobs() {
   const feedVersion = useFeedVersion()
   const debouncedKeyword = useDebounce(keyword, 400)
 
-  const buildFeedFilters = useCallback(
+  const feedFilters = useMemo(
     () => ({
       providers: selectedProviders,
       remoteOnly,
@@ -366,6 +364,34 @@ export function Jobs() {
     ]
   )
 
+  const {
+    data: feedData,
+    isLoading: feedLoading,
+    isFetching: feedFetching,
+    error: feedError,
+    refetch: refetchFeed,
+  } = useJobsFeed(feedFilters, { enabled: !historicalMode })
+
+  const { data: scanAnalytics } = useLatestScanAnalytics({ enabled: !historicalMode })
+
+  useEffect(() => {
+    if (historicalMode || !feedData) return
+    setDisplayJobs(feedData.jobs)
+    setAllFeedJobs(feedData.jobs)
+    if (feedData.jobs.length > 0) setHasFetched(true)
+  }, [feedData, historicalMode])
+
+  useEffect(() => {
+    if (feedError) {
+      setError(feedError instanceof Error ? feedError.message : "Failed to load jobs feed")
+    }
+  }, [feedError])
+
+  useEffect(() => {
+    if (historicalMode || !feedVersion) return
+    queryClient.invalidateQueries({ queryKey: queryKeys.jobs.all })
+  }, [feedVersion, historicalMode, queryClient])
+
   const applyHistoricalFilters = useCallback(
     (jobs) => {
       let result = filterJobsByLocationAndProviders(jobs, locationFilter, selectedProviders)
@@ -387,7 +413,7 @@ export function Jobs() {
             job.title?.toLowerCase().includes(needle) ||
             job.company?.toLowerCase().includes(needle) ||
             job.location?.toLowerCase().includes(needle) ||
-            job.description?.toLowerCase().includes(needle)
+            (job.description_full || job.description)?.toLowerCase().includes(needle)
         )
       }
       return result
@@ -421,25 +447,25 @@ export function Jobs() {
     }
     return filterJobsByLocation(displayJobs, locationFilter)
   }, [displayJobs, locationFilter, historicalMode, applyHistoricalFilters])
-  const loadUnifiedFeed = useCallback(async () => {
-    const filters = buildFeedFilters()
-    const [feed, analytics] = await Promise.all([
-      getJobsFeed(filters),
-      getLatestScanAnalytics().catch(() => null),
-    ])
-    setDisplayJobs(feed.jobs)
-    setAllFeedJobs(feed.jobs)
-    setFeedMeta({
-      providers: feed.providers ?? {},
-      duplicates_removed: feed.duplicates_removed ?? 0,
-      total_jobs: feed.total_jobs ?? feed.jobs.length,
-    })
-    setScanAnalytics(analytics)
-    if (feed.jobs.length > 0) {
-      setHasFetched(true)
-    }
-    return feed
-  }, [buildFeedFilters])
+
+  const feedMeta = useMemo(
+    () => ({
+      providers: feedData?.providers ?? {},
+      duplicates_removed: feedData?.duplicates_removed ?? 0,
+      total_jobs: feedData?.total_jobs ?? feedData?.jobs?.length ?? 0,
+    }),
+    [feedData]
+  )
+
+  useEffect(() => {
+    setListPage(1)
+  }, [
+    filteredJobs.length,
+    historicalMode,
+    locationFilter,
+    debouncedKeyword,
+    selectedProviders,
+  ])
 
   const loadHistoricalJobs = useCallback(async () => {
     const data = await fetchHistoricalJobs()
@@ -448,48 +474,17 @@ export function Jobs() {
     return data
   }, [])
 
-  const loadDisplayJobs = useCallback(async () => {
-    if (historicalMode) {
-      return loadHistoricalJobs()
-    }
-    return loadUnifiedFeed()
-  }, [historicalMode, loadHistoricalJobs, loadUnifiedFeed])
-
-  useEffect(() => {
-    if (historicalMode) return
-    setStatus("loading")
-    loadUnifiedFeed()
-      .catch((err) => {
-        setError(err instanceof Error ? err.message : "Failed to load jobs feed")
-      })
-      .finally(() => setStatus("idle"))
-  }, [
-    historicalMode,
-    selectedProviders,
-    remoteOnly,
-    easyApplyOnly,
-    minMatch,
-    debouncedKeyword,
-    sortBy,
-    strongMatchesOnly,
-    remoteHighMatch,
-    easyApplyHighMatch,
-    loadUnifiedFeed,
-  ])
-
-  useEffect(() => {
-    if (historicalMode || !feedVersion) return
-    loadUnifiedFeed().catch(() => {})
-  }, [feedVersion, historicalMode, loadUnifiedFeed])
+  const [historicalLoading, setHistoricalLoading] = useState(false)
 
   useEffect(() => {
     if (!historicalMode) return
-    setStatus("loading")
+    setHistoricalLoading(true)
+    setError(null)
     loadHistoricalJobs()
       .catch((err) => {
         setError(err instanceof Error ? err.message : "Failed to load jobs")
       })
-      .finally(() => setStatus("idle"))
+      .finally(() => setHistoricalLoading(false))
   }, [historicalMode, loadHistoricalJobs])
 
   const onHistoricalToggle = (enabled) => {
@@ -502,7 +497,6 @@ export function Jobs() {
     setKeyword("")
     setSortBy("default")
     setError(null)
-    setStatus("loading")
     setDisplayJobs([])
   }
 
@@ -521,14 +515,30 @@ export function Jobs() {
     setIsRefreshing(true)
     setScanSummary(null)
     setHasFetched(true)
+    setScanProgressLabel("Starting scan…")
+    setLiveScanStatus(null)
 
     try {
-      const result = await fetchJobs()
+      const result = await fetchJobs({
+        onProgress: (status) => {
+          setLiveScanStatus(status)
+          const provider = status.current_provider
+          const pct = status.progress ?? 0
+          setScanProgressLabel(
+            provider
+              ? `Scanning ${provider}… ${pct}%`
+              : status.status === "processing"
+                ? `Matching jobs… ${pct}%`
+                : `Fetching jobs… ${pct}%`
+          )
+        },
+      })
       setScanSummary(result)
       setScanAnalytics(
         resolveScanSummary(result, result.scan_summary) ?? result.scan_summary ?? null
       )
-      await loadUnifiedFeed()
+      await refetchFeed()
+      await queryClient.invalidateQueries({ queryKey: queryKeys.jobs.latestScan() })
       setLocationFilter(DEFAULT_LOCATION_FILTER)
       setSelectedProviders([])
       setRemoteOnly(false)
@@ -536,17 +546,20 @@ export function Jobs() {
       setMinMatch(0)
       setKeyword("")
       setSortBy("default")
-      setStatus("success")
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch jobs")
-      setStatus("error")
     } finally {
       setIsRefreshing(false)
+      setScanProgressLabel("")
+      setLiveScanStatus(null)
     }
   }
 
   const isFetching = isRefreshing
-  const isLoadingJobs = status === "loading" && !isRefreshing && displayJobs.length === 0
+  const isLoadingJobs =
+    !historicalMode
+      ? feedLoading && !feedData && !isRefreshing
+      : historicalLoading && displayJobs.length === 0
   const isDiscoveringJobs = isFetching || isLoadingJobs
   const resolvedScanSummary = useMemo(
     () => resolveScanSummary(scanSummary, scanAnalytics),
@@ -848,36 +861,48 @@ export function Jobs() {
         </div>
       )}
 
-      {isDiscoveringJobs && <JobDiscoveryLoading />}
+      {isDiscoveringJobs && (
+        <div className="space-y-2">
+          <JobDiscoveryLoading />
+          {liveScanStatus ? <ScanProgressPanel status={liveScanStatus} /> : null}
+          {scanProgressLabel ? (
+            <p className="text-center text-sm text-muted-foreground">{scanProgressLabel}</p>
+          ) : null}
+        </div>
+      )}
 
       {showEmpty ? (
-        <Card>
-          <CardContent className="flex min-h-[200px] flex-col items-center justify-center gap-2 py-10 text-center">
-            <Globe className="size-8 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">
-              {historicalMode
-                ? "No historical jobs in MongoDB yet. Run Fetch Jobs in normal mode first."
-                : hasFetched
-                  ? "No fresh high-quality India/remote engineering jobs passed quality validation."
-                  : "Upload a resume, then run Fetch Jobs to generate your first curated batch."}
-            </p>
-          </CardContent>
-        </Card>
+        <EmptyState
+          icon={Globe}
+          title={
+            historicalMode
+              ? "No saved jobs yet"
+              : hasFetched
+                ? "No matches in this batch"
+                : "Your job feed is waiting"
+          }
+          description={
+            historicalMode
+              ? "Run Fetch Jobs in normal mode first to build your history."
+              : hasFetched
+                ? "Try adjusting filters or run another scan. LinkedIn roles appear after Career Lens is connected."
+                : "Upload your resume, connect LinkedIn in Scans & Automation, then run Fetch Jobs for your first curated batch."
+          }
+        />
       ) : showFilterEmpty ? (
-        <Card>
-          <CardContent className="flex min-h-[160px] flex-col items-center justify-center gap-2 py-10 text-center">
-            <Filter className="size-8 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">
-              No jobs found for selected location filter.
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Try &quot;All&quot;, &quot;Germany&quot;, or &quot;Remote&quot; to inspect datasets.
-            </p>
-          </CardContent>
-        </Card>
+        <EmptyState
+          icon={Filter}
+          title="No jobs for this filter"
+          description='Try "All", "Germany", or "Remote" to see more roles from your latest scan.'
+        />
       ) : (
         <VirtualizedJobGrid
           jobs={filteredJobs}
+          page={listPage}
+          onPageChange={(next) => {
+            setListPage(next)
+            window.scrollTo({ top: 0, behavior: "smooth" })
+          }}
           renderCard={(job) => (
             <JobCard
               job={job}

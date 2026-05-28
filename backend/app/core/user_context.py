@@ -19,6 +19,12 @@ def clear_request_user() -> None:
     current_user_id.set(None)
     current_workspace_id.set(None)
     current_user_email.set(None)
+    try:
+        from app.services.job_service import clear_latest_scan_jobs_cache
+
+        clear_latest_scan_jobs_cache()
+    except Exception:
+        pass
 
 
 def get_request_user_id() -> str | None:

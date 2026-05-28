@@ -2,8 +2,12 @@ import logging
 
 from fastapi import APIRouter, HTTPException, Query
 
+from app.core.config import settings
+from app.core.user_context import require_request_user_id
 from app.models.career_analytics import CareerAnalyticsDashboard
+from app.services.cache_service import get_json, set_json
 from app.services.career_analytics.analytics_dashboard_service import build_analytics_dashboard
+from app.utils.cache_keys import analytics_user_key
 from app.services.career_analytics.application_conversion_service import (
     build_application_conversion_analytics,
 )
@@ -28,12 +32,28 @@ async def career_analytics_dashboard(
     role: str = Query(default="", description="Target role for role-specific analytics"),
 ) -> CareerAnalyticsDashboard:
     """Full career intelligence dashboard."""
+    role_key = role.strip() or None
+    user_id = require_request_user_id()
+    cache_key = analytics_user_key(user_id, role=role.strip())
+    cached = get_json(cache_key)
+    if cached is not None:
+        return CareerAnalyticsDashboard(**cached)
+
+    logger.info("[CAREER_ANALYTICS] dashboard start role=%s", role_key or "(default)")
     try:
-        data = await build_analytics_dashboard(target_role=role.strip() or None)
+        data = await build_analytics_dashboard(target_role=role_key)
+        logger.info("[CAREER_ANALYTICS] dashboard ok role=%s", role_key or "(default)")
+        set_json(cache_key, data, settings.CACHE_RESPONSE_TTL)
         return CareerAnalyticsDashboard(**data)
     except Exception as exc:
         logger.exception("Failed to build career analytics dashboard")
-        raise HTTPException(status_code=500, detail={"message": str(exc)}) from exc
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "message": "Career analytics is temporarily unavailable. Try again in a moment.",
+                "error": str(exc),
+            },
+        ) from exc
 
 
 @router.get("/career-analytics/salary")

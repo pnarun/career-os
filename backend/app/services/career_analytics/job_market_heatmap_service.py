@@ -6,12 +6,13 @@ from collections import Counter
 from typing import Any
 
 from app.services.career_analytics._analytics_utils import job_city
+from app.services.career_analytics._constants import ANALYTICS_HISTORY_SAMPLE
 from app.services.job_service import get_all_jobs, get_latest_scan_jobs
 
 
 async def build_job_market_heatmap() -> dict[str, Any]:
     jobs = await get_latest_scan_jobs()
-    all_jobs = await get_all_jobs()
+    all_jobs = await get_all_jobs(limit=ANALYTICS_HISTORY_SAMPLE)
 
     city_counts: Counter[str] = Counter()
     city_match: dict[str, list[int]] = {}

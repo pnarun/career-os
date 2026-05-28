@@ -103,6 +103,29 @@ export const RESUME_AI_MESSAGES = [
   { title: "Almost ready", subtitle: "Your Resume AI dashboard is loading." },
 ]
 
+export const CAREER_ANALYTICS_MESSAGES = [
+  {
+    title: "Building your career analytics…",
+    subtitle: "Aggregating salary, skills, and market data from your scans.",
+  },
+  {
+    title: "Crunching salary insights…",
+    subtitle: "Comparing compensation bands across your matched roles.",
+  },
+  {
+    title: "Mapping skill demand…",
+    subtitle: "Ranking in-demand skills for your target roles.",
+  },
+  {
+    title: "Analyzing market trends…",
+    subtitle: "Provider performance, locations, and role transitions.",
+  },
+  {
+    title: "Almost ready…",
+    subtitle: "Charts and KPIs will appear in a moment — thanks for waiting.",
+  },
+]
+
 export const INTERVIEW_PREP_MESSAGES = [
   { title: "Loading interview prep…", subtitle: "Fetching saved and applied jobs for practice." },
   { title: "Building your prep workspace", subtitle: "Great interviews start with good preparation." },
@@ -155,6 +178,7 @@ export const LOADING_MESSAGES_BY_KEY = {
   "job-match": JOB_MATCH_MESSAGES,
   "assisted-apply": ASSISTED_APPLY_MESSAGES,
   "resume-ai": RESUME_AI_MESSAGES,
+  "career-analytics": CAREER_ANALYTICS_MESSAGES,
   "interview-prep": INTERVIEW_PREP_MESSAGES,
   "interview-questions": INTERVIEW_QUESTIONS_MESSAGES,
   "copilot-boot": COPILOT_BOOT_MESSAGES,

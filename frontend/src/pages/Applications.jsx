@@ -15,13 +15,12 @@ import { SlowLoadingPageCenter } from "@/components/SlowLoadingStatus"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
+import { useApplicationsCenter } from "@/hooks/useApplicationsCenter"
 import {
   APPLICATION_STATUSES,
   STATUS_TABS,
   deleteApplication,
-  getApplicationAnalytics,
   getApplicationTimeline,
-  getApplications,
   updateApplicationNotes,
   updateApplicationStatus,
 } from "@/services/applicationService"
@@ -215,40 +214,34 @@ function ApplicationRow({ application, onRefresh }) {
 
 export function Applications() {
   const [activeTab, setActiveTab] = useState("saved")
-  const [applications, setApplications] = useState([])
-  const [analytics, setAnalytics] = useState(null)
   const [statusFilter, setStatusFilter] = useState("")
   const [sourceFilter, setSourceFilter] = useState("")
   const [remoteFilter, setRemoteFilter] = useState(false)
   const [minMatch, setMinMatch] = useState(0)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
 
-  const loadData = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const [apps, stats] = await Promise.all([
-        getApplications({
-          status: statusFilter || undefined,
-          source: sourceFilter || undefined,
-          remote: remoteFilter ? true : undefined,
-          minMatch: minMatch > 0 ? minMatch : undefined,
-        }),
-        getApplicationAnalytics(),
-      ])
-      setApplications(apps)
-      setAnalytics(stats)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load applications")
-    } finally {
-      setLoading(false)
-    }
-  }, [statusFilter, sourceFilter, remoteFilter, minMatch])
+  const filterKey = {
+    status: statusFilter,
+    source: sourceFilter,
+    remote: remoteFilter,
+    minMatch,
+  }
 
-  useEffect(() => {
-    loadData()
-  }, [loadData])
+  const { data, isLoading, isFetching, error: fetchError, refetch } =
+    useApplicationsCenter(filterKey)
+
+  const applications = data?.applications ?? []
+  const analytics = data?.analytics ?? null
+  const loading = isLoading && !data
+  const error =
+    fetchError instanceof Error
+      ? fetchError.message
+      : fetchError
+        ? "Failed to load applications"
+        : null
+
+  const loadData = useCallback(() => {
+    void refetch()
+  }, [refetch])
 
   const tabConfig = STATUS_TABS.find((tab) => tab.id === activeTab) ?? STATUS_TABS[0]
 

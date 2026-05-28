@@ -16,6 +16,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN playwright install --with-deps chromium
 
 COPY app ./app
+# Brand PNGs for /brand on API dev pages (logs, /uptime)
 
 ENV PORT=8000
 EXPOSE 8000

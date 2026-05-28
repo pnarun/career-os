@@ -2,6 +2,7 @@ import { useState } from "react"
 
 import { TabbedHub } from "@/components/layout/TabbedHub"
 import { ApplicationsMapProvider } from "@/context/ApplicationsMapContext"
+import { useHubTabPrefetch } from "@/hooks/useHubTabPrefetch"
 import { Jobs } from "@/pages/Jobs"
 import { JobMatch } from "@/pages/JobMatch"
 
@@ -12,6 +13,7 @@ const TABS = [
 
 export function JobsHub() {
   const [tab, setTab] = useState("feed")
+  useHubTabPrefetch("jobs", tab)
 
   return (
     <TabbedHub

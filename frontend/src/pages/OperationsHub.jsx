@@ -1,9 +1,17 @@
-import { useState } from "react"
+import { lazy, Suspense, useState } from "react"
 
 import { TabbedHub } from "@/components/layout/TabbedHub"
-import { Automation } from "@/pages/Automation"
-import { Notifications } from "@/pages/Notifications"
-import { Scans } from "@/pages/Scans"
+import { PageErrorBoundary } from "@/components/PageErrorBoundary"
+import { PageSectionSkeleton } from "@/components/PageSectionSkeleton"
+import { useHubTabPrefetch } from "@/hooks/useHubTabPrefetch"
+
+const Scans = lazy(() => import("@/pages/Scans").then((m) => ({ default: m.Scans })))
+const Automation = lazy(() =>
+  import("@/pages/Automation").then((m) => ({ default: m.Automation }))
+)
+const Notifications = lazy(() =>
+  import("@/pages/Notifications").then((m) => ({ default: m.Notifications }))
+)
 
 const TABS = [
   { id: "scans", label: "Scans & Schedule" },
@@ -24,19 +32,32 @@ function readInitialTab() {
   return "scans"
 }
 
+function TabFallback() {
+  return (
+    <div className="py-8">
+      <PageSectionSkeleton lines={6} />
+    </div>
+  )
+}
+
 export function OperationsHub() {
   const [tab, setTab] = useState(readInitialTab)
+  useHubTabPrefetch("operations", tab)
 
   return (
     <TabbedHub
       tourId="operations-hub"
       title="Scans & Automation"
-      description="Scheduled job discovery, browser sessions, and alerts"
+      description="Run scans, connect LinkedIn with Career Lens, and manage alerts"
       tabs={TABS}
       activeTab={tab}
       onTabChange={setTab}
     >
-      {tab === "scans" ? <Scans /> : tab === "automation" ? <Automation /> : <Notifications />}
+      <PageErrorBoundary>
+        <Suspense fallback={<TabFallback />}>
+          {tab === "scans" ? <Scans /> : tab === "automation" ? <Automation /> : <Notifications />}
+        </Suspense>
+      </PageErrorBoundary>
     </TabbedHub>
   )
 }

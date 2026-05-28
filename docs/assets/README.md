@@ -2,6 +2,12 @@
 
 Place visual assets here so product, engineering, and demo docs stay consistent.
 
+## Brand
+
+| File | Description |
+|------|-------------|
+| `ui/career-os-logo.png` | Official wordmark (same as `frontend/public/career-os-logo.png`) |
+
 ## Directory structure
 
 ```text

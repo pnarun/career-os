@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from "react"
+import { useState } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import {
   Bell,
   Briefcase,
@@ -13,11 +14,10 @@ import { SlowLoadingPageCenter } from "@/components/SlowLoadingStatus"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
+import { useNotificationsCenter } from "@/hooks/useNotificationsCenter"
+import { queryKeys } from "@/lib/queryKeys"
 import {
   generateCareerInsights,
-  getAutomationAnalytics,
-  getCareerInsights,
-  getNotifications,
   markAllNotificationsRead,
   markNotificationRead,
   NOTIFICATION_TABS,
@@ -85,57 +85,66 @@ function AnalyticsCards({ analytics }) {
 }
 
 export function Notifications() {
+  const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState("all")
-  const [notifications, setNotifications] = useState([])
-  const [insights, setInsights] = useState([])
-  const [analytics, setAnalytics] = useState(null)
-  const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
-  const [error, setError] = useState(null)
+  const [generateError, setGenerateError] = useState(null)
 
-  const loadData = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const typeFilter = activeTab === "all" ? undefined : activeTab
-      const [notifData, insightData, analyticsData] = await Promise.all([
-        getNotifications({ type: typeFilter, limit: 100 }),
-        getCareerInsights(10),
-        getAutomationAnalytics(5),
-      ])
-      setNotifications(notifData.notifications ?? [])
-      setInsights(insightData ?? [])
-      setAnalytics(analyticsData)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load notifications")
-    } finally {
-      setLoading(false)
-    }
-  }, [activeTab])
+  const { data, isLoading, isFetching, error: fetchError, refetch } =
+    useNotificationsCenter(activeTab)
+  const notifications = data?.notifications ?? []
+  const insights = data?.insights ?? []
+  const analytics = data?.analytics ?? null
+  const loading = isLoading && !data
+  const queryError =
+    fetchError instanceof Error
+      ? fetchError.message
+      : fetchError
+        ? "Failed to load notifications"
+        : null
+  const error = queryError || generateError
 
-  useEffect(() => {
-    loadData()
-  }, [loadData])
+  const loadData = () => {
+    void refetch()
+  }
 
   const handleMarkRead = async (id) => {
     await markNotificationRead(id)
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
-    )
+    queryClient.setQueryData(queryKeys.operations.notifications(activeTab), (prev) => {
+      if (!prev) return prev
+      return {
+        ...prev,
+        notifications: prev.notifications.map((n) =>
+          n.id === id ? { ...n, read: true } : n
+        ),
+      }
+    })
   }
 
   const handleMarkAllRead = async () => {
     await markAllNotificationsRead()
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
+    queryClient.setQueryData(queryKeys.operations.notifications(activeTab), (prev) => {
+      if (!prev) return prev
+      return {
+        ...prev,
+        notifications: prev.notifications.map((n) => ({ ...n, read: true })),
+      }
+    })
   }
 
   const handleGenerateInsights = async () => {
     setGenerating(true)
+    setGenerateError(null)
     try {
       const result = await generateCareerInsights()
-      setInsights(result.insights ?? [])
+      queryClient.setQueryData(queryKeys.operations.notifications(activeTab), (prev) => {
+        if (!prev) return prev
+        return { ...prev, insights: result.insights ?? [] }
+      })
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to generate insights")
+      setGenerateError(
+        err instanceof Error ? err.message : "Failed to generate insights"
+      )
     } finally {
       setGenerating(false)
     }
@@ -151,8 +160,8 @@ export function Notifications() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={loadData} disabled={loading}>
-            <RefreshCw className={cn("mr-2 size-4", loading && "animate-spin")} />
+          <Button variant="outline" size="sm" onClick={loadData} disabled={loading || isFetching}>
+            <RefreshCw className={cn("mr-2 size-4", (loading || isFetching) && "animate-spin")} />
             Refresh
           </Button>
           <Button variant="outline" size="sm" onClick={handleMarkAllRead}>

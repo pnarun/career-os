@@ -1,5 +1,6 @@
 import { Loader2, Sparkles } from "lucide-react"
 
+import { CareerOsLogo } from "@/components/brand/CareerOsLogo"
 import { Card, CardContent } from "@/components/ui/card"
 import { getLoadingMessages } from "@/data/loadingMessages"
 import { useSlowLoadingMessages } from "@/hooks/useSlowLoadingMessages"
@@ -84,9 +85,15 @@ export function SlowLoadingPageCenter({
   messageKey = "page-load",
   messages: messagesProp = undefined,
   className = "",
+  delayMs = undefined,
 }) {
   const messages = messagesProp ?? getLoadingMessages(messageKey)
-  const { showSlow, message, index, count } = useSlowLoadingMessages(active, messages)
+  const slowOpts = delayMs !== undefined ? { delayMs } : undefined
+  const { showSlow, message, index, count } = useSlowLoadingMessages(
+    active,
+    messages,
+    slowOpts
+  )
 
   return (
     <div
@@ -95,6 +102,7 @@ export function SlowLoadingPageCenter({
         className
       )}
     >
+      <CareerOsLogo variant="full" size="sm" className="mx-auto" />
       <SpinnerIcon size="sm" />
       {showSlow ? (
         <>

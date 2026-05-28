@@ -13,8 +13,12 @@
 | HEAD | `/` | No | Render probe → 200 |
 | HEAD | `/health` | No | UptimeRobot keep-alive |
 | GET | `/health` | No | JSON health + scheduler |
+| GET | `/health?detail=1` | No | Extended health (Mongo, WebSocket, scans, providers, cache) |
 | GET | `/system/status` | No | Full dependency status |
 | GET | `/system/metrics` | No | Metrics snapshot |
+| GET | `/system/beta-ops` | No | HTML beta ops dashboard |
+| GET | `/system/beta-ops/json` | No | Beta ops snapshot JSON |
+| GET | `/brand/{filename}` | No | Static brand PNGs (email/HTML fallbacks) |
 | GET | `/logs` | No | HTML log viewer |
 | GET | `/logs/api` | No | JSON logs |
 | POST | `/internal/cron/scheduled-scans` | `X-Cron-Secret` | Trigger catch-up |

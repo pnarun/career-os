@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import {
   AlertCircle,
   CheckCircle2,
@@ -11,9 +12,14 @@ import {
   RotateCcw,
 } from "lucide-react"
 
+import { EmptyState } from "@/components/EmptyState"
 import { EmailPreviewModal } from "@/components/EmailPreviewModal"
+import { JobListPagination } from "@/components/JobListPagination"
 import { SlowLoadingPageCenter, SlowLoadingPanel } from "@/components/SlowLoadingStatus"
+import { useScanCenter } from "@/hooks/useScanCenter"
+import { queryKeys } from "@/lib/queryKeys"
 import { LiveExecutionTimeline } from "@/components/scans/LiveExecutionTimeline"
+import { ScanProgressPanel } from "@/components/scans/ScanProgressPanel"
 import { ScanDetailModal } from "@/components/scans/ScanDetailModal"
 import { useFeedVersion, useRealtimeConnection } from "@/context/RealtimeContext"
 import { Button } from "@/components/ui/button"
@@ -21,14 +27,19 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { cn } from "@/lib/utils"
 import { listResumes } from "@/services/preferencesService"
 import {
+  formatScanProgress,
+  pollScanUntilComplete,
+  startBackgroundScan,
+} from "@/services/scanBackgroundService"
+import {
   ALL_PROVIDERS,
   getEmailPreview,
   getPreferences,
-  loadScanCenterData,
-  runScanNow,
   sendEmailNow,
   updatePreferences,
 } from "@/services/scansService"
+
+const HISTORY_PAGE_SIZE = 15
 
 const TIMEZONE_OPTIONS = [
   "Asia/Kolkata",
@@ -57,9 +68,16 @@ function StatCell({ label, value, sub }) {
 }
 
 export function Scans() {
+  const queryClient = useQueryClient()
   const { connected } = useRealtimeConnection()
   const feedVersion = useFeedVersion()
-  const [data, setData] = useState(null)
+  const {
+    data,
+    isLoading,
+    isFetching,
+    refetch,
+    error: centerQueryError,
+  } = useScanCenter()
   const [prefs, setPrefs] = useState(null)
   const [preferenceId, setPreferenceId] = useState(null)
   const [resumes, setResumes] = useState([])
@@ -75,7 +93,7 @@ export function Scans() {
     preferred_locations: "",
     use_default_six_hour_schedule: true,
   })
-  const [loading, setLoading] = useState(true)
+  const [historyPage, setHistoryPage] = useState(1)
   const [busy, setBusy] = useState(null)
   const [error, setError] = useState(null)
   const [message, setMessage] = useState(null)
@@ -85,50 +103,70 @@ export function Scans() {
   const [previewMeta, setPreviewMeta] = useState({})
   const [logsOpen, setLogsOpen] = useState(false)
   const [executionLogs, setExecutionLogs] = useState([])
+  const [liveScanStatus, setLiveScanStatus] = useState(null)
 
   const load = useCallback(async () => {
-    setLoading(true)
     setError(null)
     try {
-      const [center, resumeList, preferences] = await Promise.all([
-        loadScanCenterData(),
-        listResumes(),
-        getPreferences(),
-      ])
-      setData(center)
+      const [result, resumeList] = await Promise.all([refetch(), listResumes()])
       setResumes(resumeList)
-      if (preferences) {
-        setPrefs(preferences)
-        setPreferenceId(preferences.id)
-        setSchedule({
-          scan_time: preferences.scan_time ?? "08:00",
-          timezone: preferences.timezone ?? "Asia/Kolkata",
-          frequency: preferences.frequency ?? "every_6h",
-          is_active: preferences.is_active ?? true,
-          resume_id: preferences.resume_id ?? "",
-          auto_email_on_scan: preferences.auto_email_on_scan ?? true,
-          target_roles: (preferences.target_roles || []).join(", "),
-          years_experience: preferences.years_experience ?? 0,
-          preferred_locations: (preferences.preferred_locations || []).join(", "),
-          use_default_six_hour_schedule: preferences.use_default_six_hour_schedule ?? true,
-        })
-      }
+      return result
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load scan center")
-    } finally {
-      setLoading(false)
     }
+  }, [refetch])
+
+  useEffect(() => {
+    listResumes()
+      .then(setResumes)
+      .catch(() => {})
   }, [])
 
   useEffect(() => {
-    load()
-  }, [load])
+    const preferences = data?.preferences
+    if (!preferences) return
+    setPrefs(preferences)
+    setPreferenceId(preferences.id)
+    setSchedule({
+      scan_time: preferences.scan_time ?? "08:00",
+      timezone: preferences.timezone ?? "Asia/Kolkata",
+      frequency: preferences.frequency ?? "every_6h",
+      is_active: preferences.is_active ?? true,
+      resume_id: preferences.resume_id ?? "",
+      auto_email_on_scan: preferences.auto_email_on_scan ?? true,
+      target_roles: (preferences.target_roles || []).join(", "),
+      years_experience: preferences.years_experience ?? 0,
+      preferred_locations: (preferences.preferred_locations || []).join(", "),
+      use_default_six_hour_schedule: preferences.use_default_six_hour_schedule ?? true,
+    })
+  }, [data?.preferences])
+
+  useEffect(() => {
+    if (centerQueryError) {
+      setError(
+        centerQueryError instanceof Error
+          ? centerQueryError.message
+          : "Failed to load scan center"
+      )
+    }
+  }, [centerQueryError])
 
   useEffect(() => {
     if (feedVersion > 0) {
-      load()
+      queryClient.invalidateQueries({ queryKey: queryKeys.scans.center() })
     }
-  }, [feedVersion, load])
+  }, [feedVersion, queryClient])
+
+  const scanHistory = useMemo(() => data?.history ?? [], [data?.history])
+  const historyTotalPages = Math.max(1, Math.ceil(scanHistory.length / HISTORY_PAGE_SIZE))
+  const pagedHistory = useMemo(() => {
+    const start = (historyPage - 1) * HISTORY_PAGE_SIZE
+    return scanHistory.slice(start, start + HISTORY_PAGE_SIZE)
+  }, [scanHistory, historyPage])
+
+  useEffect(() => {
+    setHistoryPage(1)
+  }, [scanHistory.length])
 
   const requirePrefs = () => {
     if (!preferenceId) {
@@ -139,9 +177,10 @@ export function Scans() {
   }
 
   const pushLog = (text) => {
+    const at = new Date().toLocaleTimeString()
     setExecutionLogs((prev) => [
       ...prev,
-      { at: new Date().toLocaleTimeString(), text },
+      { id: `${Date.now()}-${prev.length}`, at, text },
     ])
     setLogsOpen(true)
   }
@@ -153,12 +192,23 @@ export function Scans() {
     setMessage(null)
     pushLog("Starting manual scan…")
     try {
-      const result = await runScanNow(preferenceId)
-      pushLog(`Scan complete — ${result.jobs_found ?? 0} jobs, stored ${result.stored ?? 0}`)
+      const { scan_id: scanId } = await startBackgroundScan({
+        preferences_id: preferenceId,
+        send_email: true,
+      })
+      pushLog(`Scan started (${scanId}) — running in background…`)
+      const final = await pollScanUntilComplete(scanId, {
+        onProgress: (status) => {
+          pushLog(formatScanProgress(status))
+        },
+      })
+      const result = final.result_summary || {}
+      const jobsFound = result.stored ?? final.jobs_stored ?? 0
+      pushLog(`Scan complete — ${jobsFound} jobs stored`)
       setMessage(
         result.email_sent
-          ? `Scan complete — ${result.jobs_found} jobs emailed.`
-          : `Scan complete — ${result.jobs_found} jobs found.`
+          ? `Scan complete — ${jobsFound} jobs emailed.`
+          : `Scan complete — ${jobsFound} jobs found.`
       )
       await load()
     } catch (err) {
@@ -166,6 +216,7 @@ export function Scans() {
       setError(err instanceof Error ? err.message : "Scan failed")
     } finally {
       setBusy(null)
+      setLiveScanStatus(null)
     }
   }
 
@@ -239,7 +290,7 @@ export function Scans() {
     }
   }
 
-  if (loading) {
+  if (isLoading && !data) {
     return <SlowLoadingPageCenter active messageKey="scan-center" />
   }
 
@@ -263,8 +314,8 @@ export function Scans() {
             ) : null}
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={load}>
-          <RefreshCw className="mr-2 size-4" />
+        <Button variant="outline" size="sm" onClick={() => load()} disabled={isFetching}>
+          <RefreshCw className={cn("mr-2 size-4", isFetching && "animate-spin")} />
           Refresh
         </Button>
       </div>
@@ -306,7 +357,12 @@ export function Scans() {
               Retry Failed Providers
             </Button>
           </div>
-          {busy === "scan" ? <SlowLoadingPanel active messageKey="scan" minHeight="140px" /> : null}
+          {busy === "scan" ? (
+            <div className="space-y-3">
+              {liveScanStatus ? <ScanProgressPanel status={liveScanStatus} /> : null}
+              <SlowLoadingPanel active messageKey="scan" minHeight="140px" />
+            </div>
+          ) : null}
           {busy === "email" ? <SlowLoadingPanel active messageKey="email" minHeight="140px" /> : null}
           {busy === "preview" ? (
             <SlowLoadingPanel active messageKey="email-preview" minHeight="120px" />
@@ -512,8 +568,8 @@ export function Scans() {
             <CardTitle className="text-sm">Execution log</CardTitle>
           </CardHeader>
           <CardContent className="max-h-40 space-y-1 overflow-y-auto font-mono text-xs text-muted-foreground">
-            {executionLogs.map((log, i) => (
-              <p key={i}>
+            {executionLogs.map((log) => (
+              <p key={log.id}>
                 [{log.at}] {log.text}
               </p>
             ))}
@@ -541,9 +597,9 @@ export function Scans() {
               </tr>
             </thead>
             <tbody>
-              {(data?.history || []).map((row) => (
+              {pagedHistory.map((row) => (
                 <tr
-                  key={row.id}
+                  key={row.id || `${row.type}-${row.scanId}-${row.started}`}
                   className="cursor-pointer border-b border-border/50 hover:bg-muted/20"
                   onClick={() => setSelectedRow(row)}
                 >
@@ -559,9 +615,22 @@ export function Scans() {
               ))}
             </tbody>
           </table>
-          {!data?.history?.length && (
-            <p className="py-6 text-center text-sm text-muted-foreground">No scan history yet.</p>
+          {!scanHistory.length && (
+            <EmptyState
+              icon={Radar}
+              title="No scans yet"
+              description="Run your first job scan above. We'll search multiple boards and rank matches to your resume."
+              className="border-none bg-transparent"
+            />
           )}
+          <JobListPagination
+            page={historyPage}
+            totalPages={historyTotalPages}
+            totalItems={scanHistory.length}
+            pageSize={HISTORY_PAGE_SIZE}
+            onPageChange={setHistoryPage}
+            className="mt-4"
+          />
         </CardContent>
       </Card>
 

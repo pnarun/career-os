@@ -3,6 +3,7 @@ import logging
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
 from app.auth.jwt_service import verify_access_token
+from app.core.config import settings
 from app.core.user_context import clear_request_user, set_request_user
 from app.realtime.websocket_manager import realtime_manager
 from app.services.user_service import UserNotFoundError, get_user_by_id
@@ -46,6 +47,16 @@ async def realtime_websocket(
         return
 
     set_request_user(user.id, user.workspace_id, user.email)
+
+    if realtime_manager.total_connections() >= settings.WEBSOCKET_MAX_CONNECTIONS_TOTAL:
+        logger.warning("[REALTIME] connection rejected: global limit")
+        await _reject_websocket(websocket, 4429, "Server busy — try again shortly")
+        return
+
+    if realtime_manager.connection_count(user.id) >= settings.WEBSOCKET_MAX_CONNECTIONS_PER_USER:
+        logger.warning("[REALTIME] connection rejected: per-user limit user=%s", user_id)
+        await _reject_websocket(websocket, 4429, "Too many tabs open")
+        return
 
     await realtime_manager.connect(websocket, user.id)
     try:

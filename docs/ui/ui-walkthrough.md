@@ -62,7 +62,7 @@ flowchart TB
 
 | Tab | Page | Actions |
 |-----|------|---------|
-| Feed | `Jobs.jsx` | Filter, sort, save, apply modals, virtualized grid |
+| Feed | `Jobs.jsx` | Filter, sort, save, apply modals, paginated grid (6/page) |
 | Match | `JobMatch.jsx` | Paste JD URL/text, score |
 
 **Modals:** `JobDetailsModal`, `JobDescriptionModal`, `ApplyAssistantModal`

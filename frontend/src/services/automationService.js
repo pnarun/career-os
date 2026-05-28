@@ -16,6 +16,37 @@ export async function getSessionStatus() {
   return response.json()
 }
 
+export async function getLinkedInAutomationStatus() {
+  const response = await apiFetch(`/automation/linkedin/status`)
+  const data = await response.json()
+  if (!response.ok) {
+    throw new Error(await parseErrorMessage(response))
+  }
+  return data
+}
+
+export async function disconnectLinkedIn() {
+  const response = await apiFetch(`/automation/linkedin/disconnect`, {
+    method: "POST",
+  })
+  const data = await response.json()
+  if (!response.ok) {
+    throw new Error(await parseErrorMessage(response))
+  }
+  return data
+}
+
+export async function generateLinkedInPairingCode() {
+  const response = await apiFetch(`/automation/linkedin/pairing-code`, {
+    method: "POST",
+  })
+  const data = await response.json()
+  if (!response.ok) {
+    throw new Error(await parseErrorMessage(response))
+  }
+  return data
+}
+
 /**
  * @param {{ url: string, platform?: string, headless?: boolean | null }} payload
  */

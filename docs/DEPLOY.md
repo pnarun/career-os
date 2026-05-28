@@ -149,6 +149,8 @@ Test login from the Vercel URL; check browser DevTools → Network for CORS erro
 | Build fails on Render | Check Docker logs; Playwright install needs enough memory |
 | Vite still calls localhost | Rebuild Vercel after env change |
 
-After deploy, confirm `/health` returns `"status":"ok"`. Optional: `/logs` viewer when the latest API build is live.
+After deploy, confirm `/health` returns `"status":"ok"`. Optional: `/health?detail=1`, `/system/beta-ops`, and `/logs` when the latest API build is live.
+
+Before external beta, run through [beta/beta-readiness.md](./beta/beta-readiness.md) (privacy policy, extension version, email digest).
 
 See also `README.md` for local development.

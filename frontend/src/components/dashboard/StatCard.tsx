@@ -1,3 +1,4 @@
+import { memo } from "react"
 import type { LucideIcon } from "lucide-react"
 
 import {
@@ -18,7 +19,7 @@ type StatCardProps = {
   accent?: string
 }
 
-export function StatCard({
+export const StatCard = memo(function StatCard({
   title,
   value,
   description,
@@ -64,4 +65,4 @@ export function StatCard({
       </CardContent>
     </Card>
   )
-}
+})

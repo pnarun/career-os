@@ -1,5 +1,8 @@
 import { useCallback, useMemo, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
+
+import { queryKeys } from "@/lib/queryKeys"
+import { STALE_TIMES } from "@/lib/staleTimes"
 import {
   ArrowRight,
   BarChart3,
@@ -67,16 +70,16 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
     refetch: refetchCore,
     isFetching: coreFetching,
   } = useQuery({
-    queryKey: ["dashboard", "core"],
+    queryKey: queryKeys.dashboard.core(),
     queryFn: getDashboardCore,
-    staleTime: 45_000,
+    staleTime: STALE_TIMES.dashboardCore,
     retry: 1,
   })
 
   const { data: insights, isLoading: insightsLoading } = useQuery({
-    queryKey: ["dashboard", "insights"],
+    queryKey: queryKeys.dashboard.insights(),
     queryFn: getDashboardInsights,
-    staleTime: 120_000,
+    staleTime: STALE_TIMES.dashboardInsights,
     enabled: Boolean(core),
   })
 

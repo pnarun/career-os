@@ -1,6 +1,7 @@
 import { useState } from "react"
-import { ArrowLeft, Briefcase, Loader2 } from "lucide-react"
+import { ArrowLeft, Loader2 } from "lucide-react"
 
+import { CareerOsLogo } from "@/components/brand/CareerOsLogo"
 import { useAuth } from "@/context/AuthContext"
 import { SlowLoadingFormHint } from "@/components/SlowLoadingStatus"
 import { WakeAwareButton } from "@/components/WakeAwareButton"
@@ -28,16 +29,7 @@ function detectTimezone() {
 function AuthBrand({ dark }) {
   return (
     <div className="mb-4 flex flex-col items-center text-center">
-      <div
-        className={cn(
-          "mb-3 flex size-12 items-center justify-center rounded-xl text-white shadow-lg",
-          dark
-            ? "neon-glow-sm bg-gradient-to-br from-indigo-500 to-violet-600"
-            : "bg-gradient-to-br from-indigo-600 via-violet-600 to-orange-500 shadow-violet-500/30"
-        )}
-      >
-        <Briefcase className="size-6" />
-      </div>
+      <CareerOsLogo variant={dark ? "full" : "black"} size="lg" className="mx-auto" />
     </div>
   )
 }

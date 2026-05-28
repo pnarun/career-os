@@ -197,6 +197,19 @@ def _portal_url() -> str:
     return "https://career-os-two-chi.vercel.app"
 
 
+def _logo_img_src() -> str:
+    from app.core.brand_assets import email_logo_img_src
+
+    return email_logo_img_src()
+
+
+def _email_logo_attachments() -> list[dict]:
+    from app.core.brand_assets import email_logo_inline_attachment
+
+    attachment = email_logo_inline_attachment()
+    return [attachment] if attachment else []
+
+
 def _email_footer_plain() -> str:
     return (
         f"\n\nOpen Career OS: {_portal_url()}\n\n"
@@ -225,6 +238,9 @@ def _build_portal_cta_html() -> str:
 
 def _email_shell(inner_content: str, title: str) -> str:
     portal_cta = _build_portal_cta_html()
+    logo_src = _logo_img_src()
+    if not logo_src.startswith("cid:"):
+        logo_src = html.escape(logo_src)
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -241,12 +257,11 @@ def _email_shell(inner_content: str, title: str) -> str:
             <td style="padding-bottom:24px;border-bottom:1px solid #334155;">
               <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
                 <tr>
-                  <td width="48" valign="top">
-                    <div style="width:40px;height:40px;border-radius:10px;
-                      background:linear-gradient(135deg,#6366f1,#8b5cf6);text-align:center;
-                      line-height:40px;font-size:18px;">⚡</div>
+                  <td width="56" valign="middle">
+                    <img src="{logo_url}" alt="Career OS" width="180" height="48"
+                      style="display:block;height:48px;width:auto;max-width:200px;" />
                   </td>
-                  <td style="padding-left:12px;">
+                  <td style="padding-left:12px;" valign="middle">
                     <h1 style="margin:0;font-size:22px;font-weight:700;color:#f8fafc;">Career OS</h1>
                     <p style="margin:4px 0 0;font-size:13px;color:#94a3b8;">Your autonomous career assistant</p>
                   </td>
@@ -504,16 +519,19 @@ def _dispatch_resend(
 
     _configure_resend(api_key)
 
+    payload: dict = {
+        "from": from_email,
+        "to": [recipient],
+        "subject": built.subject,
+        "html": built.html_body,
+        "text": built.text_body,
+    }
+    attachments = _email_logo_attachments()
+    if attachments:
+        payload["attachments"] = attachments
+
     try:
-        resend.Emails.send(
-            {
-                "from": from_email,
-                "to": [recipient],
-                "subject": built.subject,
-                "html": built.html_body,
-                "text": built.text_body,
-            }
-        )
+        resend.Emails.send(payload)
         sent_at = _utc_now_iso()
         if built.email_type == "no_match":
             logger.info("[NO_MATCH_EMAIL_SENT] to=%s", recipient)
@@ -547,23 +565,37 @@ def send_password_reset_otp(email: str, otp: str) -> None:
         f"Your Career OS password reset code is: {otp}\n\n"
         "This code expires in 10 minutes. If you did not request this, ignore this email."
     )
-    html_body = (
-        f"<p>Your Career OS password reset code is:</p>"
-        f"<p style='font-size:28px;font-weight:bold;letter-spacing:4px'>{html.escape(otp)}</p>"
-        f"<p>This code expires in 10 minutes.</p>"
+    html_body = _email_shell(
+        f"""
+          <tr><td style="padding:24px 0;">
+            <p style="margin:0 0 12px;font-size:15px;color:#e2e8f0;">
+              Your Career OS password reset code is:
+            </p>
+            <p style="margin:0 0 16px;font-size:28px;font-weight:700;letter-spacing:4px;color:#f8fafc;">
+              {html.escape(otp)}
+            </p>
+            <p style="margin:0;font-size:14px;color:#94a3b8;line-height:1.6;">
+              This code expires in 10 minutes. If you did not request this, you can ignore this email.
+            </p>
+          </td></tr>
+        """,
+        subject,
     )
     api_key, from_email = _ensure_configured()
     _configure_resend(api_key)
+    payload: dict = {
+        "from": from_email,
+        "to": [recipient],
+        "subject": subject,
+        "html": html_body,
+        "text": text_body,
+    }
+    attachments = _email_logo_attachments()
+    if attachments:
+        payload["attachments"] = attachments
+
     try:
-        resend.Emails.send(
-            {
-                "from": from_email,
-                "to": [recipient],
-                "subject": subject,
-                "html": html_body,
-                "text": text_body,
-            }
-        )
+        resend.Emails.send(payload)
         logger.info("[PASSWORD_RESET_OTP_SENT] to=%s", recipient)
     except ResendError as exc:
         raise EmailServiceError(str(exc)) from exc

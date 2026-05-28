@@ -3,7 +3,7 @@ import { AlertTriangle, CheckCircle2, Clock, ShieldAlert } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { getSourceLabel } from "@/utils/jobLocationUtils"
 import {
-  getProviderErrorLabel,
+  getProviderFriendlyMessage,
   getProviderStatusList,
   getProviderStatusStyle,
 } from "@/utils/providerStatusUtils"
@@ -53,19 +53,17 @@ function ProviderStatusBadge({ diagnostic }) {
         {requiresAuth && (
           <span className="inline-flex items-center gap-0.5">
             <ShieldAlert className="size-3" />
-            Auth required
+            Reconnect needed
           </span>
         )}
-        {sessionValid === false && <span>Session invalid</span>}
+        {sessionValid === false && <span>Session expired</span>}
         {sessionValid === true && <span>Session OK</span>}
       </div>
 
       {!isSuccess && errorType !== "none" && (
-        <p className="mt-2 font-medium">{getProviderErrorLabel(errorType)}</p>
-      )}
-
-      {!isSuccess && errorMessage && (
-        <p className="mt-1 leading-snug opacity-90">{errorMessage}</p>
+        <p className="mt-2 font-medium leading-snug">
+          {getProviderFriendlyMessage(errorType, errorMessage)}
+        </p>
       )}
     </div>
   )

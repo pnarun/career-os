@@ -93,6 +93,12 @@ On Render:
 - [ ] Manual scan runs (`POST /run-scan-now`)
 - [ ] WebSocket connects (no infinite invalid-token loop)
 - [ ] UptimeRobot monitor green
+- [ ] LinkedIn pairing flow works end-to-end:
+  - Generate code in Scans & Automation
+  - Connect in Career Lens popup
+  - Automation page shows `Connected` + `Healthy`
+- [ ] Extension API points to production backend (`https://career-os-pd9g.onrender.com`)
+- [ ] Production UI fallback is enabled (error boundary redirects users to landing page after 5s)
 
 ## Playwright on Render
 

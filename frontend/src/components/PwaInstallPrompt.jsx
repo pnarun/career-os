@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
-import { Download, X } from "lucide-react"
+import { X } from "lucide-react"
 
+import { CareerOsLogo } from "@/components/brand/CareerOsLogo"
 import { Button } from "@/components/ui/button"
 
 export function PwaInstallPrompt() {
@@ -36,9 +37,7 @@ export function PwaInstallPrompt() {
   return (
     <div className="fixed bottom-20 left-4 right-4 z-[90] mx-auto max-w-md rounded-lg border border-primary/30 bg-background p-4 shadow-lg lg:bottom-6">
       <div className="flex items-start gap-3">
-        <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
-          <Download className="size-5" />
-        </div>
+        <CareerOsLogo variant="symbol" size="sm" />
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold">Install Career OS</p>
           <p className="mt-0.5 text-xs text-muted-foreground">

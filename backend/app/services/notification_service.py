@@ -256,6 +256,15 @@ async def send_daily_digest_email(
     if not preferences.email_notifications:
         return False
 
+    from app.services.email_delivery_guard import email_sent_within_cooldown
+
+    if email_sent_within_cooldown(preferences):
+        logger.info(
+            "[DIGEST_EMAIL_SKIPPED] preference_id=%s reason=recent_email_cooldown",
+            preferences.id,
+        )
+        return False
+
     _ = remote_jobs, easy_apply_jobs, skills_to_learn, application_summary, provider_stats, insights
 
     summary = scan_summary or ScanEmailSummary()
@@ -303,15 +312,6 @@ async def notify_high_match_jobs(
                 )
             )
             sent += 1
-
-        if preferences.email_notifications and job.match_percentage >= HIGH_MATCH_THRESHOLD:
-            try:
-                summary = ScanEmailSummary()
-                built = build_opportunities_email([job], summary, preferences.email)
-                built.subject = f"Career OS — {job.match_percentage}% Match: {job.title}"
-                _dispatch_resend(preferences.email, built)
-            except (EmailNotConfiguredError, EmailServiceError):
-                pass
 
     return sent
 

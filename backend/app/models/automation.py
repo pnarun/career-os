@@ -73,6 +73,24 @@ class SessionStatusResponse(BaseModel):
     sessions: dict[str, PlatformSessionStatus] = Field(default_factory=dict)
 
 
+class LinkedInCookiePayload(BaseModel):
+    name: str
+    value: str
+    domain: str
+    path: str = "/"
+    expires: float | int = -1
+    httpOnly: bool = False
+    secure: bool = True
+    sameSite: str | None = None
+
+
+class LinkedInConnectRequest(BaseModel):
+    platform: str = "linkedin"
+    cookies: list[LinkedInCookiePayload] = Field(default_factory=list)
+    userAgent: str = ""
+    syncedAt: str | None = None
+
+
 class LinkedInDiscoveryResponse(BaseModel):
     status: str
     message: str = ""
@@ -81,3 +99,50 @@ class LinkedInDiscoveryResponse(BaseModel):
     screenshot_path: str = ""
     session_valid: bool = True
     jobs: list[dict] = Field(default_factory=list)
+
+
+class LinkedInPairingCodeResponse(BaseModel):
+    pairingCode: str
+    expiresIn: int = 300
+    expiresAt: str | None = None
+
+
+class LinkedInConnectWithCodeRequest(BaseModel):
+    pairingCode: str = Field(..., min_length=6, max_length=6)
+    cookies: list[LinkedInCookiePayload] = Field(default_factory=list)
+    userAgent: str = ""
+    extensionVersion: str = ""
+
+
+class LinkedInConnectWithCodeResponse(BaseModel):
+    success: bool = True
+    connected: bool = True
+    syncedAt: str
+    syncToken: str = ""
+
+
+class LinkedInResyncRequest(BaseModel):
+    syncToken: str = Field(..., min_length=16)
+    cookies: list[LinkedInCookiePayload] = Field(default_factory=list)
+    userAgent: str = ""
+    extensionVersion: str = ""
+
+
+class LinkedInResyncResponse(BaseModel):
+    success: bool = True
+    syncedAt: str
+
+
+class LinkedInDisconnectResponse(BaseModel):
+    success: bool = True
+    message: str = "LinkedIn session disconnected."
+
+
+class LinkedInConnectionStatusResponse(BaseModel):
+    connected: bool = False
+    lastSyncedAt: str | None = None
+    expiresSoon: bool = False
+    sessionHealthy: bool = False
+    providerStatus: str = "disconnected"
+    lastFetchAt: str | None = None
+    lastFetchJobCount: int = 0

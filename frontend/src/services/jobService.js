@@ -1,4 +1,8 @@
 import { apiFetch, parseErrorMessage } from "@/lib/apiClient"
+import {
+  pollScanUntilComplete,
+  startBackgroundScan,
+} from "@/services/scanBackgroundService"
 
 /**
  * Fetch jobs from public APIs, run match analysis, and store in MongoDB.
@@ -21,17 +25,16 @@ export async function fetchLinkedInJobs() {
   return response.json()
 }
 
-export async function fetchJobs() {
-  const response = await apiFetch(`/fetch-jobs`, {
-    method: "POST",
+/**
+ * Run job discovery in the background; polls until complete (non-blocking HTTP).
+ * @param {{ onProgress?: (status: Record<string, unknown>) => void }} [options]
+ */
+export async function fetchJobs(options = {}) {
+  const { scan_id: scanId } = await startBackgroundScan({})
+  const final = await pollScanUntilComplete(scanId, {
+    onProgress: options.onProgress,
   })
-
-  if (!response.ok) {
-    const message = await parseErrorMessage(response)
-    throw new Error(message)
-  }
-
-  return response.json()
+  return final.result_summary ?? final
 }
 
 /**

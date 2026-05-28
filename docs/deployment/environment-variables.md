@@ -61,6 +61,18 @@ Frontend and backend do **not** share secret values — they share **URLs** only
 | `CLOUDINARY_CLOUD_NAME` | Resume storage |
 | `CLOUDINARY_API_KEY` | |
 | `CLOUDINARY_API_SECRET` | |
+| `BRAND_LOGO_FULL_URL` | Optional CDN URL for full logo (email + HTML); run `python scripts/upload_brand_logos.py` |
+| `BRAND_LOGO_BLACK_URL` | Optional CDN — dark backgrounds |
+| `BRAND_LOGO_SYMBOL_URL` | Optional CDN — favicon-style mark |
+| `API_PUBLIC_URL` | Public API base for `/brand/*` asset URLs (e.g. `https://your-api.onrender.com`) |
+
+Transactional email logos prefer an **inline PNG attachment** (`cid:career-os-logo-full`) from `backend/app/static/brand/`; env CDN URLs are a fallback when inline assets are unavailable.
+
+### Extension & beta ops
+
+| Variable | Description |
+|----------|-------------|
+| `EXTENSION_MIN_VERSION` | Minimum Career Lens semver; API may return HTTP 426 if older |
 
 ### Playwright
 

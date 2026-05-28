@@ -6,14 +6,24 @@ import { apiFetch, parseErrorMessage } from "@/lib/apiClient"
 /**
  * @param {Record<string, unknown>} job
  */
-export function mapFeedJobToDisplay(job) {
+const LIST_DESCRIPTION_MAX = 400
+
+function trimDescription(text, maxLen = LIST_DESCRIPTION_MAX) {
+  const value = String(text || "").trim()
+  if (!value || value.length <= maxLen) return value
+  return `${value.slice(0, maxLen)}…`
+}
+
+export function mapFeedJobToDisplay(job, { listView = true } = {}) {
+  const fullDescription = job.description ?? ""
   return {
     id: job.job_id,
     title: job.title,
     company: job.company,
     company_tag: job.company_tag ?? "",
     location: job.location,
-    description: job.description,
+    description: listView ? trimDescription(fullDescription) : fullDescription,
+    description_full: fullDescription,
     apply_url: job.apply_url,
     source: job.source,
     easy_apply: job.easy_apply,
@@ -52,6 +62,7 @@ export function mapFeedJobToDisplay(job) {
  *   strongMatchesOnly?: boolean
  *   remoteHighMatch?: boolean
  *   easyApplyHighMatch?: boolean
+ *   company?: string
  * }} [filters]
  */
 export async function getJobsFeed(filters = {}) {

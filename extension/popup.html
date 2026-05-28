@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Career Lens</title>
+    <link rel="stylesheet" href="./popup.css" />
+  </head>
+  <body>
+    <main class="popup">
+      <header class="header">
+        <img src="./icons/icon48.png" alt="" class="logo" />
+        <div>
+          <h1>Career Lens</h1>
+          <p class="tagline">Beta · LinkedIn session sync for Career OS</p>
+          <p id="extensionVersion" class="version-tag" aria-label="Extension version"></p>
+        </div>
+      </header>
+
+      <section id="mainCard" class="card">
+        <div id="viewChecking" class="view hidden">
+          <div class="row-center">
+            <span class="spinner" aria-hidden="true"></span>
+            <span>Checking…</span>
+          </div>
+        </div>
+
+        <div id="viewNotLoggedIn" class="view hidden">
+          <p class="status-title">Sign in to LinkedIn first</p>
+          <p class="muted">Use this Chrome profile, then return here.</p>
+          <button id="openLinkedInBtn" type="button" class="btn">Open LinkedIn</button>
+        </div>
+
+        <div id="viewPairing" class="view hidden">
+          <p class="status-title">Enter your pairing code</p>
+          <p class="muted fine">
+            Generate a 6-digit code in Career OS → Scans &amp; Automation → Automation
+          </p>
+          <p class="muted fine trust">
+            Career Lens only syncs your LinkedIn session for jobs you can already see. We never
+            collect passwords or browsing history.
+          </p>
+          <label class="sr-only" for="pairingCode">Pairing code</label>
+          <input
+            id="pairingCode"
+            type="text"
+            maxlength="6"
+            inputmode="numeric"
+            placeholder="000000"
+            autocomplete="one-time-code"
+          />
+          <button id="connectBtn" type="button" class="btn">Connect</button>
+        </div>
+
+        <div id="viewConnecting" class="view hidden">
+          <div class="row-center">
+            <span class="spinner" aria-hidden="true"></span>
+            <span>Connecting LinkedIn…</span>
+          </div>
+        </div>
+
+        <div id="viewConnected" class="view hidden">
+          <div class="connected-badge">
+            <span class="dot-ok" aria-hidden="true"></span>
+            LinkedIn connected
+          </div>
+          <p id="connectedSynced" class="muted"></p>
+          <p class="muted fine">Your session stays synced automatically.</p>
+          <button id="resyncBtn" type="button" class="btn secondary">Resync</button>
+          <button id="disconnectBtn" type="button" class="btn-link danger">Disconnect</button>
+        </div>
+
+        <div id="healthBanner" class="health-banner hidden" role="status"></div>
+
+        <p id="errorMessage" class="error hidden" role="alert"></p>
+        <p id="successMessage" class="success hidden" role="status"></p>
+      </section>
+
+      <section class="card card-compact">
+        <button id="copyDiagnosticsBtn" type="button" class="btn secondary btn-small">
+          Copy diagnostics
+        </button>
+        <p class="muted fine">Version, sync status, and backend reachability — no passwords or cookies.</p>
+      </section>
+
+      <footer class="footer">
+        <a id="privacyLink" href="#" target="_blank" rel="noopener noreferrer">
+          Privacy policy
+        </a>
+      </footer>
+    </main>
+    <script type="module" src="./popup.js"></script>
+  </body>
+</html>

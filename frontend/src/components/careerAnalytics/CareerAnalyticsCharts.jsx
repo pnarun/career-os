@@ -1,3 +1,4 @@
+import { memo } from "react"
 import {
   Bar,
   BarChart,
@@ -32,7 +33,7 @@ const CHART_TOOLTIP = {
   itemStyle: { color: "#fdba74" },
 }
 
-export function GrowthScoreGauge({ score, size = 120 }) {
+export const GrowthScoreGauge = memo(function GrowthScoreGauge({ score, size = 120 }) {
   const radius = (size - 16) / 2
   const circumference = 2 * Math.PI * radius
   const offset = circumference - (score / 100) * circumference
@@ -68,9 +69,9 @@ export function GrowthScoreGauge({ score, size = 120 }) {
       </div>
     </div>
   )
-}
+})
 
-export function SalaryBarChart({ data }) {
+export const SalaryBarChart = memo(function SalaryBarChart({ data }) {
   if (!data?.length) return null
   const chartData = data.slice(0, 8).map((item) => ({
     skill: item.skill?.length > 14 ? `${item.skill.slice(0, 12)}…` : item.skill,
@@ -88,9 +89,9 @@ export function SalaryBarChart({ data }) {
       </BarChart>
     </ResponsiveContainer>
   )
-}
+})
 
-export function SkillDemandChart({ data }) {
+export const SkillDemandChart = memo(function SkillDemandChart({ data }) {
   if (!data?.length) return null
   const chartData = data.slice(0, 10).map((item) => ({
     skill: item.skill?.length > 12 ? `${item.skill.slice(0, 10)}…` : item.skill,
@@ -113,9 +114,9 @@ export function SkillDemandChart({ data }) {
       </BarChart>
     </ResponsiveContainer>
   )
-}
+})
 
-export function MarketTrendChart({ rising, declining }) {
+export const MarketTrendChart = memo(function MarketTrendChart({ rising, declining }) {
   const combined = [
     ...(rising || []).slice(0, 5).map((r) => ({ tech: r.technology, change: r.change_pct })),
     ...(declining || []).slice(0, 3).map((d) => ({ tech: d.technology, change: d.change_pct })),
@@ -137,9 +138,9 @@ export function MarketTrendChart({ rising, declining }) {
       </BarChart>
     </ResponsiveContainer>
   )
-}
+})
 
-export function ConversionFunnelChart({ funnel }) {
+export const ConversionFunnelChart = memo(function ConversionFunnelChart({ funnel }) {
   if (!funnel?.length) return null
   const data = funnel.map((stage) => ({
     name: stage.stage,
@@ -157,9 +158,9 @@ export function ConversionFunnelChart({ funnel }) {
       </FunnelChart>
     </ResponsiveContainer>
   )
-}
+})
 
-export function ProviderRadarChart({ providers }) {
+export const ProviderRadarChart = memo(function ProviderRadarChart({ providers }) {
   if (!providers?.length) return null
   const chartData = providers.slice(0, 6).map((p) => ({
     provider: p.label,
@@ -183,9 +184,9 @@ export function ProviderRadarChart({ providers }) {
       </RadarChart>
     </ResponsiveContainer>
   )
-}
+})
 
-export function LocationHeatmapChart({ heatmap }) {
+export const LocationHeatmapChart = memo(function LocationHeatmapChart({ heatmap }) {
   if (!heatmap?.length) return null
   const chartData = heatmap.slice(0, 10).map((h) => ({
     location: h.location?.length > 14 ? `${h.location.slice(0, 12)}…` : h.location,
@@ -204,9 +205,9 @@ export function LocationHeatmapChart({ heatmap }) {
       </BarChart>
     </ResponsiveContainer>
   )
-}
+})
 
-export function GrowthTimelineChart({ sessions }) {
+export const GrowthTimelineChart = memo(function GrowthTimelineChart({ sessions }) {
   if (!sessions?.length) return null
   const chartData = [...sessions].reverse().map((s, i) => ({
     label: `Scan ${i + 1}`,
@@ -224,4 +225,4 @@ export function GrowthTimelineChart({ sessions }) {
       </LineChart>
     </ResponsiveContainer>
   )
-}
+})

@@ -16,7 +16,9 @@ import {
 import { useState } from "react"
 
 import { LandingAuthFlow } from "@/components/auth/LandingAuthFlow"
+import { CareerOsLogo } from "@/components/brand/CareerOsLogo"
 import { Button } from "@/components/ui/button"
+import { privacyPolicyHref } from "@/lib/publicRoutes"
 import { cn } from "@/lib/utils"
 
 const FEATURES = [
@@ -150,15 +152,22 @@ export function LandingPage() {
       <header className="landing-header fixed inset-x-0 top-0 z-50 border-b backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
           <div className="flex items-center gap-2.5">
-            <div className="flex size-9 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-600 via-violet-600 to-orange-500 text-white shadow-md shadow-violet-500/25">
-              <Briefcase className="size-4" />
-            </div>
-            <span className="landing-text-gradient text-lg font-bold tracking-tight">Career OS</span>
+            <CareerOsLogo variant="black" size="md" className="max-h-9" />
           </div>
-          <Button onClick={openAuth} size="sm" className="landing-btn-primary gap-1.5 shadow-md shadow-indigo-500/20">
-            Sign in
-            <ChevronRight className="size-4" />
-          </Button>
+          <div className="flex items-center gap-3">
+            <a
+              href={privacyPolicyHref()}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="landing-muted hidden text-sm font-medium underline-offset-4 hover:underline sm:inline"
+            >
+              Privacy Policy
+            </a>
+            <Button onClick={openAuth} size="sm" className="landing-btn-primary gap-1.5 shadow-md shadow-indigo-500/20">
+              Sign in
+              <ChevronRight className="size-4" />
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -368,6 +377,15 @@ export function LandingPage() {
               ELVA Tech
             </a>
           </span>
+          <span aria-hidden> &nbsp;•&nbsp; </span>
+          <a
+            href={privacyPolicyHref()}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-semibold underline-offset-4 hover:underline"
+          >
+            Privacy Policy
+          </a>
         </div>
       </footer>
       </div>

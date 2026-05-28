@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 AUTOMATION_ROOT = Path(__file__).resolve().parent.parent
 SCREENSHOTS_DIR = AUTOMATION_ROOT / "logs" / "screenshots"
+HTML_SNAPSHOTS_DIR = AUTOMATION_ROOT / "logs" / "html_snapshots"
 
 
 def _platform_dir(platform: str) -> Path:
@@ -92,6 +93,31 @@ async def capture_error_state(
         platform=platform,
         label=f"error_{error_label}",
     )
+
+
+def save_html_snapshot_sync(
+    page: Any,
+    *,
+    platform: str = "generic",
+    label: str = "page",
+) -> Path:
+    """Persist page HTML for selector debugging (sync Playwright worker)."""
+    directory = HTML_SNAPSHOTS_DIR / "".join(
+        c if c.isalnum() or c in "-_" else "_" for c in platform.lower()
+    ) or "generic"
+    directory.mkdir(parents=True, exist_ok=True)
+    filename = f"{_timestamp_slug()}_{label}.html"
+    path = directory / filename
+    html = page.content()
+    path.write_text(html, encoding="utf-8")
+    logger.info(
+        "[AUTOMATION][HTML] platform=%s label=%s path=%s bytes=%d",
+        platform,
+        label,
+        path,
+        len(html.encode("utf-8")),
+    )
+    return path
 
 
 def screenshot_relative_path(absolute: Path) -> str:

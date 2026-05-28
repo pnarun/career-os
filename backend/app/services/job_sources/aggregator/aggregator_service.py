@@ -1,7 +1,11 @@
 import asyncio
 import logging
+from collections.abc import Callable
+from typing import Any
 
 from app.core.circuit_breaker import is_provider_circuit_open, record_provider_failure, record_provider_success
+from app.core.config import settings
+from app.observability.operational_metrics import record_provider_fetch
 from app.services.job_sources.arbeitnow_source import ArbeitnowJobSource
 from app.services.job_sources.base.base_source import BaseJobSource
 from app.services.job_sources.base.provider_diagnostics import (
@@ -46,8 +50,13 @@ def _apply_diagnostic(
         source_errors[diagnostic.source] = diagnostic.error_message or diagnostic.error_type
 
 
+ProviderCompleteCallback = Callable[[str, str, int, str], None]
+
+
 async def aggregate_jobs(
     sources: list[BaseJobSource] | None = None,
+    *,
+    on_provider_complete: ProviderCompleteCallback | None = None,
 ) -> AggregatorFetchResult:
     """
     Fetch all sources concurrently, isolate failures, merge and deduplicate.
@@ -72,11 +81,6 @@ async def aggregate_jobs(
 
     logger.info("[AGGREGATOR_START] sources=%s", [s.source_name for s in active_adapters])
 
-    results = await asyncio.gather(
-        *[adapter.run_fetch() for adapter in active_adapters],
-        return_exceptions=True,
-    )
-
     all_jobs: list[NormalizedSourceJob] = []
     source_counts: dict[str, int] = {}
     failed_sources: list[str] = []
@@ -95,8 +99,16 @@ async def aggregate_jobs(
         )
         if skipped.source not in failed_sources:
             failed_sources.append(skipped.source)
+        if on_provider_complete:
+            on_provider_complete(
+                skipped.source,
+                "failed",
+                0,
+                skipped.error_message or "circuit open",
+            )
 
-    for adapter, result in zip(active_adapters, results):
+    async def _process_adapter_result(adapter: BaseJobSource, result: Any) -> None:
+        nonlocal total_fetched
         name = adapter.source_name
 
         if isinstance(result, Exception):
@@ -110,13 +122,15 @@ async def aggregate_jobs(
                 diagnostic,
                 0,
             )
+            if on_provider_complete:
+                on_provider_complete(name, "failed", 0, diagnostic.error_message)
             logger.warning(
                 "[AGGREGATOR_SOURCE_FAILED] source=%s error_type=%s message=%s",
                 name,
                 diagnostic.error_type,
                 diagnostic.error_message,
             )
-            continue
+            return
 
         diagnostic = result.diagnostic
         if diagnostic is None:
@@ -141,6 +155,16 @@ async def aggregate_jobs(
             count,
         )
 
+        if on_provider_complete:
+            cb_status = "success" if diagnostic.status == "success" else "failed"
+            on_provider_complete(name, cb_status, count, diagnostic.error_message or "")
+
+        record_provider_fetch(
+            name,
+            duration_ms=diagnostic.duration_ms,
+            success=diagnostic.status == "success",
+            error_type=diagnostic.error_type or "",
+        )
         if diagnostic.status == "success":
             record_provider_success(name)
             logger.info(
@@ -158,6 +182,50 @@ async def aggregate_jobs(
                 diagnostic.error_type,
                 diagnostic.error_message,
             )
+
+    async def _fetch_adapter_with_resilience(adapter: BaseJobSource) -> tuple[BaseJobSource, Any]:
+        if on_provider_complete:
+            on_provider_complete(adapter.source_name, "running", 0, "")
+
+        timeout = settings.PROVIDER_FETCH_TIMEOUT_SECONDS
+        max_attempts = max(1, settings.PROVIDER_FETCH_MAX_RETRIES + 1)
+        last_exc: Exception | None = None
+
+        for attempt in range(1, max_attempts + 1):
+            try:
+                result = await asyncio.wait_for(adapter.run_fetch(), timeout=timeout)
+                return adapter, result
+            except asyncio.TimeoutError:
+                last_exc = TimeoutError(f"{adapter.source_name} timed out after {timeout}s")
+                logger.warning(
+                    "PROVIDER_TIMEOUT source=%s attempt=%d/%d",
+                    adapter.source_name,
+                    attempt,
+                    max_attempts,
+                )
+            except Exception as exc:
+                last_exc = exc
+                if attempt >= max_attempts:
+                    break
+                await asyncio.sleep(min(0.5 * attempt, 2.0))
+
+        return adapter, last_exc or RuntimeError(f"{adapter.source_name} fetch failed")
+
+    async def _fetch_adapter(adapter: BaseJobSource) -> tuple[BaseJobSource, Any]:
+        return await _fetch_adapter_with_resilience(adapter)
+
+    if on_provider_complete and active_adapters:
+        tasks = [asyncio.create_task(_fetch_adapter(adapter)) for adapter in active_adapters]
+        for task in asyncio.as_completed(tasks):
+            adapter, result = await task
+            await _process_adapter_result(adapter, result)
+    else:
+        results = await asyncio.gather(
+            *[adapter.run_fetch() for adapter in active_adapters],
+            return_exceptions=True,
+        )
+        for adapter, result in zip(active_adapters, results):
+            await _process_adapter_result(adapter, result)
 
     dedupe_result = dedupe_jobs(all_jobs)
     deduped = dedupe_result.jobs

@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react"
 
-import { getRefreshToken } from "@/lib/apiClient"
+import { AUTH_SESSION_EXPIRED_EVENT, getRefreshToken } from "@/lib/apiClient"
 import {
   clearSessionBootstrap,
   resolveSession,
@@ -25,6 +25,16 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     loadSession()
   }, [loadSession])
+
+  useEffect(() => {
+    const onSessionExpired = () => {
+      clearSessionBootstrap()
+      setUser(null)
+      setLoading(false)
+    }
+    window.addEventListener(AUTH_SESSION_EXPIRED_EVENT, onSessionExpired)
+    return () => window.removeEventListener(AUTH_SESSION_EXPIRED_EVENT, onSessionExpired)
+  }, [])
 
   const login = useCallback(async (credentials) => {
     const data = await authService.login(credentials)

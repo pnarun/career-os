@@ -11,6 +11,7 @@ import {
   ExternalLink,
 } from "lucide-react"
 
+import { LinkedInAutomationPanel } from "@/components/automation/LinkedInAutomationPanel"
 import { Button } from "@/components/ui/button"
 import {
   deletePlatformSession,
@@ -23,6 +24,7 @@ import {
   testPlatformSession,
 } from "@/services/automationService"
 import { fetchLinkedInJobs } from "@/services/jobService"
+import { humanizeErrorMessage, linkedInFetchUserMessage } from "@/lib/userFacingErrors"
 import { cn } from "@/lib/utils"
 
 const PLATFORMS = ["linkedin", "naukri", "indeed", "instahyre"]
@@ -68,7 +70,7 @@ function Toast({ toast, onDismiss }) {
       role="status"
     >
       <div className="flex items-start justify-between gap-3">
-        <p>{toast.message}</p>
+        <p>{String(toast.message ?? "")}</p>
         <button
           type="button"
           className="shrink-0 opacity-70 hover:opacity-100"
@@ -232,7 +234,16 @@ export function Automation() {
   const [toast, setToast] = useState(null)
 
   const showToast = useCallback((message, type = "success") => {
-    setToast({ message, type })
+    const normalizedMessage =
+      typeof message === "string"
+        ? message
+        : message && typeof message === "object" && "message" in message
+          ? String(message.message)
+          : message == null
+            ? ""
+            : String(message)
+
+    setToast({ message: normalizedMessage, type })
     window.setTimeout(() => setToast(null), 5000)
   }, [])
 
@@ -302,19 +313,23 @@ export function Automation() {
     setActionLoading(`${platform}-prepare`)
     setManualWait({ platform, mode: "prepare" })
     showToast(
-      `Browser opening for ${platform}. Log in on your machine, then tap Done logging in.`
+      `Opening ${platform} in Chromium — log in, then click Done logging in.`
     )
     try {
-      await testPlatformSession(platform)
+      const data = await testPlatformSession(platform)
       await loadSessions()
-      showToast(`Session prepare started for ${platform}. Tap Done when login is complete.`)
+      if (data.login_warning) {
+        showToast(data.message || "Session saved but may be incomplete.", "error")
+      } else {
+        showToast(data.message || `Session saved for ${platform}.`)
+      }
     } catch (err) {
-      setManualWait(null)
       showToast(
         err instanceof Error ? err.message : "Prepare session failed",
         "error"
       )
     } finally {
+      setManualWait(null)
       setActionLoading("")
     }
   }
@@ -322,20 +337,17 @@ export function Automation() {
   async function handleOpen(platform) {
     setActionLoading(`${platform}-open`)
     setManualWait({ platform, mode: "open" })
-    showToast(
-      `Opening ${platform} with saved session. Tap Done when finished.`
-    )
+    showToast(`Opening ${platform} with saved session — click Done when finished.`)
     try {
       const data = await openPlatformSession(platform)
-      setManualWait(null)
       showToast(data.message || "Browser closed.")
     } catch (err) {
-      setManualWait(null)
       showToast(
         err instanceof Error ? err.message : "Open session failed",
         "error"
       )
     } finally {
+      setManualWait(null)
       setActionLoading("")
     }
   }
@@ -346,24 +358,22 @@ export function Automation() {
     try {
       const data = await fetchLinkedInJobs()
       setLinkedinResult(data)
+      const friendly = linkedInFetchUserMessage(data)
       if (data.status === "ok" || data.status === "empty") {
-        showToast(
-          data.jobs_stored > 0
-            ? `Stored ${data.jobs_stored} LinkedIn jobs. View them on the Jobs page.`
-            : data.message || "LinkedIn fetch finished."
-        )
-      } else if (data.status === "session_invalid") {
-        showToast(data.message || "LinkedIn session invalid.", "error")
+        showToast(friendly)
       } else {
-        showToast(data.message || "LinkedIn fetch failed.", "error")
+        showToast(friendly, "error")
       }
     } catch (err) {
       showToast(
-        err instanceof Error ? err.message : "LinkedIn fetch failed",
+        humanizeErrorMessage(
+          err instanceof Error ? err.message : "LinkedIn import didn't complete"
+        ),
         "error"
       )
     } finally {
       setLinkedinLoading(false)
+      loadSessions()
     }
   }
 
@@ -396,13 +406,18 @@ export function Automation() {
     <div className="mx-auto max-w-4xl space-y-8 p-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-          Session control center
+          LinkedIn &amp; automation
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Create, validate, reopen, and delete Playwright storage sessions per platform.
-          No auto-apply or login automation.
+          Connect LinkedIn once with Career Lens, then import jobs and manage optional
+          browser sessions.
         </p>
       </div>
+
+      <LinkedInAutomationPanel
+        showToast={showToast}
+        onSessionsChange={setSessions}
+      />
 
       <section className="rounded-xl border border-border/80 bg-card/50 p-5">
         <div className="flex items-center justify-between gap-4">
@@ -562,12 +577,18 @@ export function Automation() {
                 </dd>
               </div>
             )}
-            {linkedinResult.message && (
-              <div className="sm:col-span-2">
-                <dt className="text-muted-foreground">Message</dt>
-                <dd>{linkedinResult.message}</dd>
-              </div>
-            )}
+            <div className="sm:col-span-2">
+              <dt className="text-muted-foreground">Summary</dt>
+              <dd className="leading-relaxed">
+                {linkedInFetchUserMessage(linkedinResult)}
+              </dd>
+              {linkedinResult.status === "session_invalid" ? (
+                <p className="mt-2 text-xs text-amber-200/90">
+                  Reconnect using the panel above — Generate pairing code, then Connect in
+                  Career Lens.
+                </p>
+              ) : null}
+            </div>
           </dl>
         )}
       </section>

@@ -6,6 +6,12 @@ import html
 from typing import Any
 from urllib.parse import quote
 
+from app.api.routes.dev_page_common import (
+    dev_page_brand_css,
+    dev_page_brand_html,
+    dev_page_favicon_link,
+)
+
 
 def render_logs_page(
     *,
@@ -16,6 +22,8 @@ def render_logs_page(
     level_filter: str,
     app_name: str,
     environment: str,
+    logo_url: str = "",
+    favicon_url: str = "",
 ) -> str:
     rows_html = ""
     for e in entries:
@@ -53,16 +61,21 @@ def render_logs_page(
     if level_filter:
         export_qs += f"&level={quote(level_filter)}"
 
+    logo_html = dev_page_brand_html(logo_url)
+    favicon_link = dev_page_favicon_link(favicon_url)
+
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  {favicon_link}
   <title>Career OS — Logs</title>
   <style>
     * {{ box-sizing: border-box; }}
     body {{ margin:0; background:#0f172a; color:#e2e8f0; font-family:system-ui,-apple-system,sans-serif; font-size:13px; }}
-    header {{ padding:14px 18px; background:#1e293b; border-bottom:1px solid #334155; }}
+    header {{ padding:14px 18px; background:#1e293b; border-bottom:1px solid #334155; display:flex; align-items:center; gap:14px; flex-wrap:wrap; }}
+    {dev_page_brand_css()}
     header h1 {{ margin:0 0 6px; font-size:18px; }}
     .meta {{ color:#94a3b8; font-size:12px; }}
     .toolbar {{ display:flex; flex-wrap:wrap; gap:10px; align-items:center; padding:12px 18px; background:#1e293b; border-bottom:1px solid #334155; }}
@@ -90,8 +103,11 @@ def render_logs_page(
 </head>
 <body>
   <header>
+    {logo_html}
+    <div>
     <h1>Career OS API Logs</h1>
     <p class="meta">{html.escape(app_name)} · {html.escape(environment)} · {len(entries)} rows · refreshes every 10s</p>
+    </div>
   </header>
   <form class="toolbar" method="get" action="/logs">
     <label>Lines
@@ -114,6 +130,7 @@ def render_logs_page(
     <a class="btn secondary" href="/logs/export?{export_qs}">Export CSV (Excel)</a>
     <a class="btn secondary" href="/logs/api?limit={limit}">JSON API</a>
     <a class="btn secondary" href="/health">Health</a>
+    <a class="btn secondary" href="/uptime">Uptime</a>
     <a class="btn secondary" href="/docs">Docs</a>
   </form>
   <div class="wrap">

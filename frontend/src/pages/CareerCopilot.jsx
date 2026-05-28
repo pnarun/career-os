@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import {
   Bot,
   Loader2,
+  RefreshCw,
   Send,
   Sparkles,
   Target,
@@ -10,13 +11,12 @@ import {
   Zap,
 } from "lucide-react"
 
-import { SlowLoadingFormHint, SlowLoadingPageCenter } from "@/components/SlowLoadingStatus"
+import { SlowLoadingFormHint } from "@/components/SlowLoadingStatus"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
+import { useCopilotOverview } from "@/hooks/useCopilotOverview"
 import {
-  getCopilotHistory,
-  getCopilotOverview,
   runCopilotQuickAction,
   sendCopilotMessage,
   SUGGESTED_PROMPTS,
@@ -67,35 +67,46 @@ function RecommendationCard({ card }) {
 }
 
 export function CareerCopilot() {
-  const [overview, setOverview] = useState(null)
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState("")
   const [sessionId, setSessionId] = useState("")
   const [loading, setLoading] = useState(false)
-  const [bootLoading, setBootLoading] = useState(true)
-  const [error, setError] = useState(null)
-  const [history, setHistory] = useState([])
+  const [chatError, setChatError] = useState(null)
   const bottomRef = useRef(null)
 
-  const loadOverview = useCallback(async () => {
-    setBootLoading(true)
-    try {
-      const [ov, hist] = await Promise.all([
-        getCopilotOverview(),
-        getCopilotHistory(10).catch(() => ({ history: [] })),
-      ])
-      setOverview(ov)
-      setHistory(hist.history || [])
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load copilot")
-    } finally {
-      setBootLoading(false)
-    }
-  }, [])
+  const {
+    data: bootData,
+    isLoading: bootLoading,
+    isError: bootError,
+    error: bootFetchError,
+    refetch: refetchOverview,
+  } = useCopilotOverview()
 
-  useEffect(() => {
-    loadOverview()
-  }, [loadOverview])
+  const overview = bootData?.overview ?? null
+  const history = bootData?.history ?? []
+
+  function formatCopilotError(err) {
+    const msg = err instanceof Error ? err.message : "Failed to load copilot"
+    const lower = msg.toLowerCase()
+    if (
+      lower.includes("authenticated") ||
+      lower.includes("expired token") ||
+      lower.includes("not authenticated")
+    ) {
+      return "Your session expired. Sign in again to use Career Copilot."
+    }
+    return msg
+  }
+
+  const error = chatError
+    ? chatError
+    : bootError
+      ? formatCopilotError(bootFetchError)
+      : null
+
+  const loadOverview = () => {
+    void refetchOverview()
+  }
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -121,13 +132,13 @@ export function CareerCopilot() {
     const msg = text.trim()
     if (!msg || loading) return
     setLoading(true)
-    setError(null)
+    setChatError(null)
     try {
       const response = await sendCopilotMessage(msg, sessionId)
       appendExchange(msg, response)
       setInput("")
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to send message")
+      setChatError(err instanceof Error ? err.message : "Failed to send message")
     } finally {
       setLoading(false)
     }
@@ -135,20 +146,40 @@ export function CareerCopilot() {
 
   const runAction = async (actionId) => {
     setLoading(true)
-    setError(null)
+    setChatError(null)
     try {
       const response = await runCopilotQuickAction(actionId, sessionId)
       const action = overview?.quick_actions?.find((a) => a.id === actionId)
       appendExchange(action?.label || actionId, response)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Quick action failed")
+      setChatError(err instanceof Error ? err.message : "Quick action failed")
     } finally {
       setLoading(false)
     }
   }
 
-  if (bootLoading) {
-    return <SlowLoadingPageCenter active messageKey="copilot-boot" />
+  if (bootLoading && !bootData) {
+    return (
+      <div className="mx-auto flex max-w-6xl flex-col items-center justify-center gap-3 py-16 text-center">
+        <Loader2 className="size-10 animate-spin text-indigo-400" />
+        <p className="text-sm font-medium text-foreground">Starting Career Copilot…</p>
+        <p className="max-w-md text-xs text-muted-foreground">
+          Loading your resume, jobs, and career context.
+        </p>
+      </div>
+    )
+  }
+
+  if (error && !overview) {
+    return (
+      <div className="mx-auto max-w-lg space-y-4 rounded-lg border border-destructive/30 bg-destructive/10 p-6 text-center">
+        <p className="text-sm text-destructive">{error}</p>
+        <Button type="button" variant="outline" size="sm" onClick={loadOverview}>
+          <RefreshCw className="mr-2 size-4" />
+          Try again
+        </Button>
+      </div>
+    )
   }
 
   const ctx = overview?.context_summary

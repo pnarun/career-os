@@ -11,6 +11,14 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  optimizeDeps: {
+    include: ["recharts"],
+  },
+  server: {
+    warmup: {
+      clientFiles: ["./src/components/careerAnalytics/CareerAnalyticsCharts.jsx"],
+    },
+  },
   build: {
     rollupOptions: {
       output: {
