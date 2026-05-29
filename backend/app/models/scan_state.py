@@ -1,4 +1,8 @@
-"""Redis-backed scan execution state for background scans."""
+"""Redis-backed scan execution state for background scans.
+
+Distributed mode: MongoDB ``scan_states`` collection is the source of truth;
+Redis ``scan:state:*`` is used only for completed/failed snapshots.
+"""
 
 from __future__ import annotations
 

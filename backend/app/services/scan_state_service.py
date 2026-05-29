@@ -1,4 +1,4 @@
-"""Persist in-flight scan progress in Redis (1h TTL)."""
+"""Scan progress state — MongoDB source of truth; Redis cache for completed scans only."""
 
 from __future__ import annotations
 
@@ -13,12 +13,16 @@ from app.models.scan_state import (
 )
 from app.core.config import settings
 from app.services.cache_service import delete, get_json, set_json
+from app.services import scan_state_mongo_store
 from app.realtime.scan_state_realtime import schedule_scan_realtime
 
 logger = logging.getLogger(__name__)
 
 SCAN_STATE_TTL_SECONDS = 3600
 _KEY_PREFIX = "scan:state:"
+
+_ACTIVE_STATUSES = frozenset({"started", "fetching", "processing"})
+_TERMINAL_STATUSES = frozenset({"completed", "failed"})
 
 
 def _state_key(scan_id: str) -> str:
@@ -33,15 +37,33 @@ def _default_providers() -> dict[str, ScanProviderState]:
     return {name: ScanProviderState(name=name, status="pending") for name in TRACKED_SCAN_PROVIDERS}
 
 
-def _load(scan_id: str) -> ScanState | None:
+def _is_active_status(status: str) -> bool:
+    return status in _ACTIVE_STATUSES
+
+
+def _load_redis(scan_id: str) -> ScanState | None:
     raw = get_json(_state_key(scan_id))
     if not raw:
         return None
     return ScanState.model_validate(raw)
 
 
+def _load(scan_id: str) -> ScanState | None:
+    """Mongo first (distributed workers); Redis fallback for legacy keys."""
+    state = scan_state_mongo_store.load_scan_state(scan_id)
+    if state is not None:
+        return state
+    return _load_redis(scan_id)
+
+
 def _save(state: ScanState) -> None:
-    set_json(_state_key(state.scan_id), state.model_dump(mode="json"), SCAN_STATE_TTL_SECONDS)
+    """Persist to Mongo always; skip Redis cache for active scans (avoid stale API reads)."""
+    scan_state_mongo_store.save_scan_state(state)
+    key = _state_key(state.scan_id)
+    if _is_active_status(state.status):
+        delete(key)
+    else:
+        set_json(key, state.model_dump(mode="json"), SCAN_STATE_TTL_SECONDS)
 
 
 def create_scan_state(*, scan_id: str, user_id: str) -> ScanState:
@@ -68,8 +90,6 @@ def _parse_iso_age_seconds(iso: str | None) -> float | None:
     if not iso:
         return None
     try:
-        from datetime import datetime
-
         started = datetime.fromisoformat(iso.replace("Z", "+00:00"))
         if started.tzinfo is None:
             started = started.replace(tzinfo=timezone.utc)
@@ -82,7 +102,7 @@ def _is_stale_inflight(
     state: ScanState, max_age_seconds: int | None = None
 ) -> bool:
     max_age_seconds = max_age_seconds or settings.SCAN_STALE_SECONDS
-    if state.status in ("completed", "failed"):
+    if state.status in _TERMINAL_STATUSES:
         return False
     age = _parse_iso_age_seconds(state.started_at)
     return age is not None and age > max_age_seconds
@@ -92,7 +112,7 @@ def expire_stale_scan_state(
     scan_id: str, *, max_age_seconds: int | None = None
 ) -> bool:
     max_age_seconds = max_age_seconds or settings.SCAN_STALE_SECONDS
-    """Mark long-running scans as failed and remove Redis state."""
+    """Mark long-running scans as failed and remove state."""
     state = _load(scan_id)
     if state is None or not _is_stale_inflight(state, max_age_seconds):
         return False
@@ -117,9 +137,26 @@ def get_scan_state(scan_id: str, *, user_id: str | None = None) -> ScanState | N
     expire_stale_scan_state(scan_id)
     state = _load(scan_id)
     if state is None:
+        logger.debug(
+            "[SCAN_STATE_API] scan_id=%s status=not_found progress=0",
+            scan_id,
+            extra={"event": "SCAN_STATE_API", "scan_id": scan_id},
+        )
         return None
     if user_id and state.user_id != user_id:
         return None
+    logger.info(
+        "[SCAN_STATE_API] scan_id=%s status=%s progress=%s",
+        scan_id,
+        state.status,
+        state.progress,
+        extra={
+            "event": "SCAN_STATE_API",
+            "scan_id": scan_id,
+            "status": state.status,
+            "progress": state.progress,
+        },
+    )
     return state
 
 
@@ -250,19 +287,24 @@ def complete_scan(
     state.jobs_found = jobs_found
     state.completed_at = _utc_now_iso()
     state.current_provider = ""
-    state.result_summary = result_summary
+    summary = dict(result_summary or {})
+    if state.providers_failed and jobs_stored > 0:
+        summary["partial_success"] = True
+    state.result_summary = summary or None
     _save(state)
     schedule_scan_realtime(state, "scan_completed")
     logger.info(
-        "SCAN_COMPLETED scan_id=%s stored=%d found=%d",
+        "SCAN_COMPLETED scan_id=%s stored=%d found=%d partial=%s",
         scan_id,
         jobs_stored,
         jobs_found,
+        bool(state.providers_failed),
         extra={
             "event": "scan_completed",
             "scan_id": scan_id,
             "jobs_stored": jobs_stored,
             "jobs_found": jobs_found,
+            "partial_success": bool(state.providers_failed),
         },
     )
     return state
@@ -291,3 +333,4 @@ def fail_scan(scan_id: str, error: str) -> ScanState | None:
 
 def delete_scan_state(scan_id: str) -> None:
     delete(_state_key(scan_id))
+    scan_state_mongo_store.delete_scan_state(scan_id)

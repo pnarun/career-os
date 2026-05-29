@@ -170,6 +170,11 @@ COLLECTION_INDEX_REGISTRY: dict[str, list[IndexSpec]] = {
         _idx([("user_id", 1), ("created_at", -1)], "scan_tasks_user_created", sparse=True),
         _idx([("preference_id", 1), ("status", 1)], "scan_tasks_pref_status", sparse=True),
     ],
+    "scan_states": [
+        _idx([("scan_id", 1)], "scan_states_scan_id", unique=True),
+        _idx([("user_id", 1), ("started_at", -1)], "scan_states_user_started"),
+        _idx([("status", 1), ("started_at", -1)], "scan_states_status_started"),
+    ],
     "apply_history": [
         _idx([("created_at", -1)], "apply_history_created"),
         _idx([("session_id", 1)], "apply_history_session"),
