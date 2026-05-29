@@ -247,11 +247,11 @@ async def cron_scheduled_scans(
     return await run_overdue_scheduled_scans()
 
 
-@router.api_route("/health", methods=["GET", "HEAD"])
+@router.api_route("/health", methods=["GET", "HEAD"], response_model=None)
 async def health(
     request: Request,
     detail: bool = Query(False, description="Include mongo, websocket, scan & provider subsystems"),
-) -> Response | dict[str, Any]:
+):
     """Health check. HEAD returns empty 200 (UptimeRobot). GET returns keep-alive JSON."""
     logger.info("[HEALTH_CHECK] method=%s", request.method)
     if request.method == "HEAD":
