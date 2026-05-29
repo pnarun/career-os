@@ -70,15 +70,16 @@ services:
       - key: CRON_SECRET
         sync: false
 
-  - type: worker
+  - type: web
     name: career-os-scan-worker
     runtime: docker
-    plan: starter
+    plan: free
     region: singapore
     autoDeploy: true
     branch: main
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
+    healthCheckPath: /health
     dockerCommand: python start_scan_worker.py
     envVars:
       - key: SERVICE_MODE

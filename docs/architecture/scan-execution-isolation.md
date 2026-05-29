@@ -17,8 +17,9 @@ flowchart TB
   T[("scan_execution_tasks\n(MongoDB)")]
   SCH["APScheduler\n(ENABLE_SCHEDULER=true)"]
 
-  subgraph Worker["Render Background Worker — start_scan_worker.py"]
+  subgraph Worker["Render Web Service — start_scan_worker.py"]
     W["ScanWorkerLoop\npoll + claim + execute"]
+    H["Health HTTP :PORT\nGET /health"]
     SCH
   end
 
@@ -37,7 +38,7 @@ flowchart TB
 |------------|--------------|---------------------|------------------|------|----------------|
 | `uvicorn app.main:app` (legacy) | `api` | `inline` (default) | `true` (default) | yes | inline in API |
 | `python start_api.py` | `api` | `dispatch` (default) | `false` (default) | yes | enqueue only |
-| `python start_scan_worker.py` | `scan_worker` | `dispatch` (default) | `true` (default) | no | poll + execute |
+| `python start_scan_worker.py` | `scan_worker` | `dispatch` (default) | `true` (default) | minimal `/health` only | poll + execute |
 | `python start_automation_worker.py` | `automation_worker` | `dispatch` | `false` | no | automation only |
 
 ## Orchestration layers
@@ -85,6 +86,25 @@ queued → claimed → running → completed | failed | abandoned
 | scan_worker + `ENABLE_SCHEDULER=true` | Worker process | Disabled by default in `start_scan_worker.py` |
 
 Only one scheduler instance should run in production: **scan worker**.
+
+## Render free tier: health HTTP on scan worker
+
+Render **Background Workers** require a paid plan. On the **free tier**, deploy the scan worker as a **Web Service** instead. Web Services must bind to `PORT` or Render terminates the process.
+
+The scan worker is **not** a public API. It runs the same scheduler + `ScanWorkerLoop` as before, plus a **tiny embedded health server** (`app/scan_execution/worker_health_server.py`):
+
+| Route | Response |
+|-------|----------|
+| `GET /` | `career-os-scan-worker alive` (plain text) |
+| `GET /health` | `{"status":"ok","service":"scan_worker"}` |
+
+- Binds `0.0.0.0:$PORT` (Render injects `PORT`)
+- Single minimal FastAPI app (no docs, no WebSocket, no realtime)
+- Runs concurrently with APScheduler and the scan loop via `asyncio.gather`
+- Startup logs: `HEALTH_SERVER_STARTED`, `HEALTH_SERVER_PORT`
+- SIGINT/SIGTERM stop both the health server and the worker loop
+
+Set **Health Check Path** to `/health` on the Render scan worker Web Service.
 
 ## Worker safety controls
 

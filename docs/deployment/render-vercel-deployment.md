@@ -10,7 +10,7 @@ flowchart LR
   User --> RenderAPI[Render Web - start_api.py]
   Vercel -->|HTTPS API| RenderAPI
   RenderAPI --> Atlas[(MongoDB Atlas)]
-  RenderWorker[Render Background Worker - start_scan_worker.py] --> Atlas
+  RenderWorker[Render Web Service - start_scan_worker.py] --> Atlas
   RenderWorker -->|claims scan tasks| Atlas
   Uptime[UptimeRobot] -->|HEAD /health| RenderAPI
 ```
@@ -82,18 +82,28 @@ See [UptimeRobot keep-alive](./uptime-robot-keepalive.md).
 
 ![Vercel env](../assets/screenshots/vercel-env.png)
 
-## 4. Scan worker background service (Phase 1B)
+## 4. Scan worker Web Service (Phase 1B)
 
-Deploy a **second Render service** for scan execution so the API stays lightweight.
+Deploy a **second Render Web Service** for scan execution (free tier cannot use Background Workers).
+
+### Why a health HTTP server?
+
+Background Workers on Render require a **paid plan**. On the **free tier**, use a **Web Service** for the scan worker. Web Services must listen on `PORT` or Render kills the container. The worker is still **not** a public API — it only exposes:
+
+- `GET /` → `career-os-scan-worker alive`
+- `GET /health` → `{"status":"ok","service":"scan_worker"}`
+
+APScheduler and `ScanWorkerLoop` run unchanged alongside this minimal server (`app/scan_execution/worker_health_server.py`).
 
 ### Scan worker service
 
 | Setting | Value |
 |---------|--------|
-| Type | **Background Worker** |
+| Type | **Web Service** (not Background Worker on free tier) |
 | Root directory | `backend` |
-| Build command | Same Docker image as API (or `pip install -r requirements.txt`) |
+| Build command | Same Docker image as API |
 | Start command | `python start_scan_worker.py` |
+| **Health check path** | `/health` |
 
 Environment (same secrets as API for MongoDB, Gemini, Resend, etc.):
 
@@ -140,9 +150,16 @@ ENABLE_AUTOMATION=true
 **Scan worker startup:**
 
 ```
+[HEALTH_SERVER_STARTED] host=0.0.0.0 port=10000
+[HEALTH_SERVER_PORT] 10000
 [STARTUP] Scheduler owner=scan_worker — scan worker owns APScheduler
 [SCHEDULER] Starting APScheduler owner=scan_worker mode=scan_worker
 [SCAN_WORKER] loop started worker_id=scan-worker-...
+```
+
+```bash
+curl https://YOUR-SCAN-WORKER.onrender.com/health
+# {"status":"ok","service":"scan_worker"}
 ```
 
 **After manual scan from UI:**
