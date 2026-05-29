@@ -116,6 +116,7 @@ async def build_detailed_health_payload(*, service: str) -> dict[str, Any]:
             "enable_realtime": settings.ENABLE_REALTIME,
             "enable_automation": settings.ENABLE_AUTOMATION,
             "scheduler_startup_catchup": settings.SCHEDULER_STARTUP_CATCHUP,
+            "scan_execution_mode": settings.SCAN_EXECUTION_MODE,
         },
     }
     _detail_cache = payload

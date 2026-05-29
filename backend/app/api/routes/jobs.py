@@ -1,9 +1,9 @@
 import logging
 
 from fastapi import APIRouter, HTTPException
-
 from app.core.config import settings
 from app.core.user_context import require_request_user_id
+from app.scan_execution.guards import api_is_dispatch_only
 from app.models.job import JobDocument, JobHistoryItem, ScanFetchResponse
 from app.services.cache_service import get_json, set_json
 from app.utils.cache_keys import jobs_feed_key
@@ -24,9 +24,23 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["jobs"])
 
 
+def _dispatch_mode_blocks_inline_scan() -> None:
+    if api_is_dispatch_only():
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "message": (
+                    "Inline job discovery is disabled in dispatch mode. "
+                    "Use POST /scans/start or POST /run-scan-now — scans run on the scan worker."
+                ),
+            },
+        )
+
+
 @router.post("/fetch-linkedin", response_model=LinkedInFetchResponse)
 async def fetch_linkedin_jobs() -> LinkedInFetchResponse:
     """Background LinkedIn discovery using saved session; merges into latest scan feed."""
+    _dispatch_mode_blocks_inline_scan()
     try:
         return await fetch_and_merge_linkedin_jobs()
     except JobDiscoveryError as exc:
@@ -48,6 +62,7 @@ async def fetch_linkedin_jobs() -> LinkedInFetchResponse:
 @router.post("/fetch-jobs", response_model=ScanFetchResponse)
 async def fetch_jobs() -> ScanFetchResponse:
     """Run a new scan session and store the top curated job batch."""
+    _dispatch_mode_blocks_inline_scan()
     try:
         return await discover_and_store_jobs()
     except JobDiscoveryError as exc:

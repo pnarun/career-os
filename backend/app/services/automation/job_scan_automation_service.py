@@ -96,6 +96,10 @@ async def run_daily_job_scan_automation(preference_id: str) -> None:
     Full daily automation flow:
     scan → score → filter → save → notify → digest
     """
+    from app.scan_execution.guards import ensure_worker_may_execute_scans
+
+    ensure_worker_may_execute_scans()
+
     run_id = await start_automation_run("daily_scan", preference_id)
     notifications_sent = 0
 
@@ -321,6 +325,10 @@ async def run_weekly_career_insights() -> None:
 
 async def run_manual_automation_scan(preferences: UserPreferencesDocument):
     """Manual scan with full automation pipeline (notifications + digest)."""
+    from app.scan_execution.guards import ensure_worker_may_execute_scans
+
+    ensure_worker_may_execute_scans()
+
     run_id = await start_automation_run("daily_scan", preferences.id)
     try:
         scan_result = await run_scan_now(preferences)

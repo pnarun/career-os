@@ -61,6 +61,8 @@ async def log_startup_verification() -> None:
             "enable_playwright": settings.ENABLE_PLAYWRIGHT,
             "enable_realtime": settings.ENABLE_REALTIME,
             "enable_automation": settings.ENABLE_AUTOMATION,
+            "service_mode": settings.SERVICE_MODE,
+            "scan_execution_mode": settings.SCAN_EXECUTION_MODE,
             "process_memory": memory,
         },
     )

@@ -8,8 +8,8 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 
 from app.auth.dependencies import CurrentUser, get_current_user
 from app.models.scan_state import ScanStartRequest, ScanStartResponse, ScanStatusResponse
-from app.services.background_scan_service import execute_background_scan, new_scan_id
-from app.services.scan_state_service import create_scan_state, get_scan_state
+from app.scan_execution import scan_execution_manager
+from app.services.scan_state_service import get_scan_state
 
 logger = logging.getLogger(__name__)
 
@@ -41,12 +41,8 @@ async def start_background_scan(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> ScanStartResponse:
     """Start a scan in the background; poll GET /scans/status/{scan_id} for progress."""
-    scan_id = new_scan_id()
-    create_scan_state(scan_id=scan_id, user_id=current_user.user_id)
-
-    background_tasks.add_task(
-        execute_background_scan,
-        scan_id=scan_id,
+    scan_id = await scan_execution_manager.submit_background_scan(
+        background_tasks=background_tasks,
         user_id=current_user.user_id,
         workspace_id=current_user.workspace_id or "",
         email=current_user.email or "",

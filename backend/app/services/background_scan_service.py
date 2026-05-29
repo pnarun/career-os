@@ -67,6 +67,10 @@ async def execute_background_scan(
     send_email: bool = False,
 ) -> None:
     """Run full discover pipeline; update Redis state throughout."""
+    from app.scan_execution.guards import ensure_worker_may_execute_scans
+
+    ensure_worker_may_execute_scans()
+
     set_request_user(user_id, workspace_id, email)
     scan_started_at = time.perf_counter()
     log_memory_event("MEMORY_BEFORE_SCAN", scan_id=scan_id, user_id=user_id)

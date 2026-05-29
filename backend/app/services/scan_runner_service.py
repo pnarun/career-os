@@ -137,6 +137,10 @@ async def _execute_scan(
     *,
     manual: bool = False,
 ) -> ScanRunResult:
+    from app.scan_execution.guards import ensure_worker_may_execute_scans
+
+    ensure_worker_may_execute_scans()
+
     log_tag = "[MANUAL_SCAN_TRIGGERED]" if manual else "[SCHEDULED_SCAN_STARTED]"
     logger.info(
         "%s preference_id=%s email=%s resume_id=%s",

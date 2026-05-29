@@ -8,6 +8,7 @@ from app.models.scan import (
     EmailPreviewResponse,
     RunScanNowRequest,
     RunScanNowResponse,
+    ScanTaskStatusResponse,
     SendEmailNowRequest,
     SendEmailNowResponse,
 )
@@ -20,7 +21,8 @@ from app.services.email_service import (
 )
 from app.models.job import JobDocument
 from app.services.job_service import JobServiceError, get_latest_scan_jobs
-from app.services.scan_runner_service import ScanRunnerError, run_scan_now
+from app.scan_execution import scan_execution_manager
+from app.services.scan_runner_service import ScanRunnerError
 from app.services.scan_session_service import (
     ScanSessionServiceError,
     get_latest_scan_session,
@@ -71,19 +73,36 @@ async def trigger_manual_scan(
                 task_id=task.id,
             )
 
-        result = await run_scan_now(preferences)
+        result = await scan_execution_manager.run_manual_scan_now(
+            preferences,
+            user_id=current_user.user_id,
+            workspace_id=current_user.workspace_id or "",
+            email=current_user.email or "",
+        )
 
-        email_error = result.email_result.error or result.email_skipped_reason
+        if result.queued:
+            return RunScanNowResponse(
+                status="queued",
+                email_to=preferences.email,
+                task_id=result.task_id,
+            )
+
+        scan_result = result.result
+        if scan_result is None:
+            raise ScanRunnerError("Manual scan returned no result")
+
+        email_error = scan_result.email_result.error or scan_result.email_skipped_reason
 
         return RunScanNowResponse(
             status="success",
-            scan_id=result.scan_id,
-            jobs_found=len(result.top_jobs),
-            email_sent=result.emailed,
+            scan_id=scan_result.scan_id,
+            jobs_found=len(scan_result.top_jobs),
+            email_sent=scan_result.emailed,
             email_to=preferences.email,
-            scan_timestamp=result.scan_timestamp,
-            stored=result.stored,
-            email_error=email_error if not result.emailed else "",
+            scan_timestamp=scan_result.scan_timestamp,
+            stored=scan_result.stored,
+            email_error=email_error if not scan_result.emailed else "",
+            task_id=result.task_id,
         )
     except UserPreferencesNotFoundError as exc:
         raise HTTPException(status_code=404, detail={"message": str(exc)}) from exc
@@ -103,6 +122,21 @@ async def trigger_manual_scan(
             status_code=500,
             detail={"message": "An unexpected error occurred"},
         ) from exc
+
+
+@router.get("/scan-tasks/{task_id}", response_model=ScanTaskStatusResponse)
+async def get_scan_task_status(
+    task_id: str,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> ScanTaskStatusResponse:
+    """Lightweight dispatch task status (dispatch mode)."""
+    payload = await scan_execution_manager.get_task_status(
+        task_id,
+        user_id=current_user.user_id,
+    )
+    if payload is None:
+        raise HTTPException(status_code=404, detail={"message": "Scan task not found"})
+    return ScanTaskStatusResponse(**payload)
 
 
 @router.post("/send-email-now", response_model=SendEmailNowResponse)

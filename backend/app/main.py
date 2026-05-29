@@ -12,7 +12,6 @@ from starlette.middleware.gzip import GZipMiddleware
 from app.auth.dependencies import get_current_user
 from app.auth.routes import router as auth_router
 from app.realtime.realtime_router import router as realtime_router
-from app.realtime.redis_bridge import start_realtime_subscriber
 from app.api.routes import db as db_routes
 from app.api.routes import jobs as jobs_routes
 from app.api.routes import match as match_routes
@@ -33,18 +32,12 @@ from app.api.routes import interview_ai as interview_ai_routes
 from app.api.routes import dashboard as dashboard_routes
 from app.api.routes import suggestions as suggestions_routes
 from app.api.routes import system as system_routes
-from app.db.indexes import ensure_all_mongo_indexes
-from app.services.automation_service import shutdown_automation
-from app.services.migration_service import run_legacy_data_migration, seed_demo_users
 from app.core.config import settings
-from app.core.database import close_mongo_connection, connect_to_mongo
 from app.core.logging_config import configure_logging
 from app.core.rate_limit import RateLimitMiddleware
 from app.core.user_context_middleware import UserContextMiddleware
-from app.core.startup_banner import log_startup_banner
 from app.observability.api_latency_middleware import ApiLatencyMiddleware
-from app.core.redis_client import close_redis, get_redis
-from app.services.scheduler_service import shutdown_scheduler, start_scheduler
+from app.runtime.bootstrap import bootstrap_api_subsystems, bootstrap_core, shutdown_api_subsystems
 
 configure_logging(service="career-os-api", level=settings.LOG_LEVEL)
 logger = logging.getLogger(__name__)
@@ -54,45 +47,8 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     realtime_task = None
     try:
-        log_startup_banner()
-        logger.info(
-            "Starting Career OS API environment=%s",
-            settings.ENVIRONMENT,
-            extra={"event": "startup", "status": "starting"},
-        )
-        await connect_to_mongo()
-        get_redis()
-        from app.services.cache_service import init_upstash_cache
-
-        init_upstash_cache()
-        await ensure_all_mongo_indexes()
-        await run_legacy_data_migration()
-        await seed_demo_users()
-
-        if settings.ENABLE_SCHEDULER:
-            await start_scheduler()
-        else:
-            logger.info(
-                "[STARTUP] ENABLE_SCHEDULER=false — APScheduler not started",
-                extra={"event": "startup", "scheduler": "disabled"},
-            )
-
-        if settings.ENABLE_REALTIME:
-            realtime_task = await start_realtime_subscriber()
-            logger.info(
-                "[STARTUP] Realtime subscriber state=%s",
-                "started" if realtime_task else "in_process_only",
-                extra={"event": "startup", "realtime": "enabled"},
-            )
-        else:
-            logger.info(
-                "[STARTUP] ENABLE_REALTIME=false — Redis subscriber not started",
-                extra={"event": "startup", "realtime": "disabled"},
-            )
-
-        from app.core.startup_checks import log_startup_verification
-
-        await log_startup_verification()
+        await bootstrap_core()
+        realtime_task = await bootstrap_api_subsystems()
         logger.info("Application ready", extra={"event": "startup", "status": "ok"})
     except Exception:
         logger.exception(
@@ -101,14 +57,7 @@ async def lifespan(app: FastAPI):
         )
         raise
     yield
-    if realtime_task:
-        realtime_task.cancel()
-    if settings.ENABLE_SCHEDULER:
-        await shutdown_scheduler()
-    if settings.ENABLE_AUTOMATION:
-        await shutdown_automation()
-    close_redis()
-    await close_mongo_connection()
+    await shutdown_api_subsystems(realtime_task)
 
 
 app = FastAPI(

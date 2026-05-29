@@ -350,6 +350,8 @@ async def system_status() -> dict[str, Any]:
             "enable_realtime": settings.ENABLE_REALTIME,
             "enable_automation": settings.ENABLE_AUTOMATION,
             "scheduler_startup_catchup": settings.SCHEDULER_STARTUP_CATCHUP,
+            "scan_execution_mode": settings.SCAN_EXECUTION_MODE,
+            "service_mode": settings.SERVICE_MODE,
         },
         "process_memory": process_memory_snapshot(),
         "service_mode": settings.SERVICE_MODE,

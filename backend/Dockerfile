@@ -16,10 +16,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN playwright install --with-deps chromium
 
 COPY app ./app
+COPY start_api.py start_scan_worker.py start_automation_worker.py ./
 # Brand PNGs for /brand on API dev pages (logs, /uptime)
 
 ENV PORT=8000
 EXPOSE 8000
 
-# Render injects PORT at runtime
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT}"]
+# Render injects PORT at runtime; override start command for scan worker service
+CMD ["python", "start_api.py"]

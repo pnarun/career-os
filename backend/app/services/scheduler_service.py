@@ -9,7 +9,6 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from app.services.automation.job_scan_automation_service import (
-    run_daily_job_scan_automation,
     run_follow_up_reminders,
     run_interview_reminders,
     run_weekly_career_insights,
@@ -167,7 +166,9 @@ async def _execute_scheduled_scan(preference_id: str) -> None:
                 preference_id,
             )
             return
-        await run_daily_job_scan_automation(preference_id)
+        from app.scan_execution import scan_execution_manager
+
+        await scan_execution_manager.dispatch_scheduled_scan(preference_id)
     except UserPreferencesServiceError as exc:
         logger.exception(
             "[SCHEDULED_SCAN_FAILED] preference_id=%s",
@@ -420,13 +421,22 @@ async def run_overdue_scheduled_scans() -> dict[str, object]:
 async def start_scheduler() -> None:
     """Start APScheduler and register active preference jobs."""
     from app.core.config import settings
+    from app.runtime.service_mode import runtime
 
     if not settings.ENABLE_SCHEDULER:
         logger.info(
-            "[SCHEDULER] Not started — ENABLE_SCHEDULER=false",
+            "[SCHEDULER] Not started — ENABLE_SCHEDULER=false owner=%s",
+            runtime.scheduler_owner_label(),
             extra={"event": "scheduler", "status": "disabled"},
         )
         return
+
+    logger.info(
+        "[SCHEDULER] Starting APScheduler owner=%s mode=%s",
+        runtime.scheduler_owner_label(),
+        runtime.mode.value,
+        extra={"event": "scheduler", "owner": runtime.scheduler_owner_label()},
+    )
 
     scheduler = get_scheduler()
     if not scheduler.running:

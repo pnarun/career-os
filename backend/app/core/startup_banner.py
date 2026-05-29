@@ -38,6 +38,7 @@ def log_startup_banner() -> None:
         f"[STARTUP] ENABLE_REALTIME={settings.ENABLE_REALTIME}",
         f"[STARTUP] ENABLE_AUTOMATION={settings.ENABLE_AUTOMATION}",
         f"[STARTUP] ENABLE_PLAYWRIGHT={settings.ENABLE_PLAYWRIGHT}",
+        f"[STARTUP] SCAN_EXECUTION_MODE={settings.SCAN_EXECUTION_MODE}",
         f"[STARTUP] PLAYWRIGHT_AVAILABILITY={_playwright_availability()}",
         f"[STARTUP] REDIS_ENABLED={settings.REDIS_ENABLED}",
         f"[STARTUP] CELERY_ENABLED={settings.CELERY_ENABLED}",

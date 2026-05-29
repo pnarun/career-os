@@ -106,6 +106,14 @@ class Settings(BaseSettings):
     ENABLE_REALTIME: bool = True
     ENABLE_AUTOMATION: bool = True
 
+    # Phase 1A/1B — scan execution isolation (inline = monolith default; dispatch = worker queue)
+    SCAN_EXECUTION_MODE: str = "inline"
+    SCAN_WORKER_POLL_SECONDS: float = 8.0
+    SCAN_WORKER_MAX_CONCURRENT: int = 1
+    SCAN_WORKER_HEARTBEAT_SECONDS: float = 60.0
+    SCAN_TASK_CLAIM_TIMEOUT_SECONDS: int = 300
+    SCAN_TASK_EXECUTION_TIMEOUT_SECONDS: int = 7200
+
     # Upstash Redis REST (response caching)
     UPSTASH_REDIS_REST_URL: str = ""
     UPSTASH_REDIS_REST_TOKEN: str = ""

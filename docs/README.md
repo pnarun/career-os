@@ -36,6 +36,7 @@
 ### Architecture
 
 - [System overview](./architecture/system-overview.md)
+- [Scan execution isolation (Phase 1A)](./architecture/scan-execution-isolation.md)
 - [Folder structure](./architecture/folder-structure.md)
 - [Engineering decisions](./engineering/engineering-decisions.md)
 
