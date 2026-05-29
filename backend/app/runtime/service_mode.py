@@ -94,12 +94,25 @@ class RuntimeManager:
             return False
         return self.scan_execution_mode() == "dispatch"
 
+    def should_publish_realtime_to_mongo(self) -> bool:
+        """Worker processes publish WS events to Mongo for API bridge delivery."""
+        return not self.is_api()
+
+    def should_start_realtime_bridge(self) -> bool:
+        """Mongo → WebSocket bridge runs on API only."""
+        return (
+            settings.ENABLE_REALTIME
+            and settings.REALTIME_BRIDGE_ENABLED
+            and self.is_api()
+        )
+
     def profile_summary(self) -> dict[str, object]:
         return {
             "service_mode": self.mode.value,
             "scan_execution_mode": self.scan_execution_mode(),
             "scheduler": self.should_start_scheduler(),
             "realtime": self.should_start_realtime(),
+            "realtime_bridge": self.should_start_realtime_bridge(),
             "scan_worker_loop": self.should_run_scan_worker_loop(),
             "automation_worker_loop": self.should_run_automation_worker_loop(),
             "execute_scans_inline": self.should_execute_scans_inline(),

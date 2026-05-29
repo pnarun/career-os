@@ -104,6 +104,20 @@ async def publish_user_event(user_id: str, event: str, **data: Any) -> int:
     }
     metrics.incr("realtime_events_total")
     metrics.incr(f"realtime_event_{event}")
+
+    from app.runtime.service_mode import runtime
+
+    if runtime.should_publish_realtime_to_mongo():
+        from app.services.realtime_event_store import publish_realtime_event
+
+        publish_realtime_event(
+            event_type=event,
+            user_id=user_id,
+            workspace_id=str(data.get("workspace_id") or ""),
+            scan_id=str(data.get("scan_id") or ""),
+            payload=payload,
+        )
+
     # Lazy import avoids circular dependency with redis_bridge → websocket_manager
     from app.realtime.redis_bridge import publish_realtime_event
 

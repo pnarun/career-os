@@ -4,6 +4,8 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.main import app
+from app.runtime.automation_worker_health_server import _health_app as automation_health_app
+from app.scan_execution.worker_health_server import _health_app as scan_worker_health_app
 
 
 @pytest.mark.asyncio
@@ -27,6 +29,32 @@ async def test_health_head():
         response = await client.head("/health")
     assert response.status_code == 200
     assert response.content == b""
+
+
+@pytest.mark.asyncio
+async def test_scan_worker_health_head_and_get():
+    transport = ASGITransport(app=scan_worker_health_app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        head = await client.head("/health")
+        get = await client.get("/health")
+    assert head.status_code == 200
+    assert head.content == b""
+    assert get.status_code == 200
+    assert get.json()["status"] == "ok"
+    assert get.json()["service"] == "scan_worker"
+
+
+@pytest.mark.asyncio
+async def test_automation_worker_health_head_and_get():
+    transport = ASGITransport(app=automation_health_app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        head = await client.head("/health")
+        get = await client.get("/health")
+    assert head.status_code == 200
+    assert head.content == b""
+    assert get.status_code == 200
+    assert get.json()["status"] == "ok"
+    assert get.json()["service"] == "automation-worker"
 
 
 @pytest.mark.asyncio

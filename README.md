@@ -6,200 +6,253 @@
 
 **By [ELVA Tech](https://elvatech.in)** · Part of **[Career Lens](https://career-lens.in)**
 
-Career OS is an AI-powered job search and career automation platform. It aggregates roles from multiple boards, scores them against your resume, runs scheduled scans, supports browser-based automation, and provides resume, interview, analytics, and copilot tooling from a single dashboard.
+Career OS is an AI-powered job search and career automation platform. It aggregates roles from multiple job boards, scores them against your resume, runs scheduled scans, supports browser-based automation, and provides resume, interview, analytics, and copilot tooling from a single dashboard.
 
-## Documentation
+This is a **production-grade modular distributed monolith**: one repository, one MongoDB database, multiple runtime processes on Render — not microservices hype, but intentional separation for reliability on free-tier infrastructure.
 
-**Full engineering & product documentation:** **[docs/README.md](docs/README.md)**
+---
 
-| Guide | Link |
-|-------|------|
-| Developer onboarding | [docs/onboarding/developer-onboarding.md](docs/onboarding/developer-onboarding.md) |
-| System architecture | [docs/architecture/system-overview.md](docs/architecture/system-overview.md) |
-| Deploy (Vercel + Render) | [docs/deployment/render-vercel-deployment.md](docs/deployment/render-vercel-deployment.md) |
-| Beta launch checklist | [docs/beta/beta-readiness.md](docs/beta/beta-readiness.md) |
-| Career Lens extension | [docs/extension/extension-architecture.md](docs/extension/extension-architecture.md) |
-| API reference | [docs/api/api-reference.md](docs/api/api-reference.md) |
-| Troubleshooting | [docs/troubleshooting/common-issues.md](docs/troubleshooting/common-issues.md) |
-| Screenshots to capture | [docs/assets/README.md](docs/assets/README.md) |
+## Documentation portal
 
-## Features
+**Start here:** [docs/README.md](docs/README.md)
 
-### Job discovery & matching
+| Audience | Entry |
+|----------|--------|
+| New developer | [docs/developer-guide/README.md](docs/developer-guide/README.md) |
+| DevOps / deploy | [docs/deployment/render-vercel-deployment.md](docs/deployment/render-vercel-deployment.md) |
+| Architecture | [docs/architecture/overview.md](docs/architecture/overview.md) |
+| QA / testing | [docs/testing/README.md](docs/testing/README.md) |
+| Product / investors | [docs/product/platform-experience.md](docs/product/platform-experience.md) |
+| Operations | [docs/operations/README.md](docs/operations/README.md) |
+| Env reference | [docs/configuration/environment-variables.md](docs/configuration/environment-variables.md) |
+| Phase status | [docs/project-status/current-phase.md](docs/project-status/current-phase.md) |
 
-- **Multi-provider job feed** — LinkedIn (Playwright), Indeed, Naukri, Instahyre, RemoteOK, Arbeitnow via a unified aggregator with provider diagnostics and circuit breaking
-- **Job Match** — Score any role against your parsed resume
-- **Unified feed** — Deduped listings with platform metadata and match insights
-- **Scan sessions** — Run and track job scans with live execution timeline and scan analytics
+---
 
-### Resume & AI
+## Vision
 
-- **Resume upload** — PDF/DOCX parsing via Cloudinary; skills and profile extraction
-- **Resume AI** — ATS scoring, keyword optimization, JD alignment, variants, and feedback
-- **New-user onboarding** — After register + platform tour, optional resume prompt; skip locks navigation until upload (existing users are unaffected)
+Help job seekers treat search like an **operating system**: one workspace for discovery, matching, application tracking, and AI coaching — instead of ten browser tabs and spreadsheets.
 
-### Applications & automation
+---
 
-- **Applications pipeline** — Saved jobs, apply status, and interview tracking
-- **Auto-apply assistant** — Playwright workflows for supported boards (e.g. LinkedIn Easy Apply, Naukri)
-- **Automation hub** — Browser session management, prepare/open signals, screenshots, and worker CLI
-- **Real-time updates** — WebSockets for scan progress, provider status, automation stream, and notifications
+## Key features
 
-### Career intelligence
+| Area | Capability | Status |
+|------|------------|--------|
+| Job discovery | LinkedIn, Indeed, Naukri, Instahyre, RemoteOK, Arbeitnow | **Implemented** |
+| AI matching | Resume-based match scores | **Implemented** |
+| Background scans | Queue + live progress | **Implemented** (distributed) |
+| Scheduled scans | Email + in-app notifications | **Implemented** |
+| Realtime UI | WebSocket + **polling fallback** | **Implemented** |
+| Resume AI | ATS, keywords, variants | **Implemented** |
+| Career Copilot & analytics | Gemini-powered insights | **Implemented** |
+| Chrome extension | LinkedIn session pairing | **Implemented** |
+| Auto-apply | Playwright-assisted flows | **Partial** (board-specific) |
+| Celery scale-out | Redis task queue | **Partial** (off in prod) |
 
-- **Career Analytics** — Market trends, salary insights, skill demand, heatmaps, and growth metrics
-- **Career Copilot** — AI assistant grounded in your jobs, resume, and preferences
-- **Interview Prep** — Readiness scores, mock interviews, question generation, and prep plans
+---
 
-### Auth & UX
+## Distributed architecture (transparent)
 
-- **JWT auth** — Register, login, refresh tokens; password reset; Google OAuth extension point
-- **Public landing page** — Marketing site at `/` with sign-in flow
-- **Privacy policy** — Public `/privacy-policy` (fixed nav + scrollable sections; linked from landing and sidebar)
-- **Beta onboarding** — Welcome modal, Settings → Beta support, ops dashboards (`/system/beta-ops`)
-- **Career Lens extension** — Chrome MV3 bridge for LinkedIn session pairing (see `extension/`)
-- **Platform tour** — First-login walkthrough with “Don’t show again”
-- **PWA** — Install prompt and service worker (production)
-- **Profile & settings** — Preferences, provider priority, scan scheduling, notifications
+```mermaid
+flowchart TB
+  User[User browser]
+  Vercel[Vercel SPA]
+  API[career-os API]
+  SW[career-os-scan-worker]
+  AW[career-os-automation]
+  Atlas[(MongoDB Atlas)]
 
-### Production infrastructure
-
-- **Redis** — Cache, rate limiting, Celery broker, realtime bridge
-- **Celery queues** — Scan, scoring, notification, analytics, and retry tasks
-- **Observability** — Structured logging, `/health` (optional `?detail=1`), `/system/status`, `/system/metrics`, `/system/beta-ops`
-- **Resilience** — Retries, circuit breakers on aggregators, configurable rate limits
-- **Docker & CI** — Compose overlays for local/staging/production, frontend Dockerfile, GitHub Actions workflow
-- **Deploy assets** — `infra/` nginx, backup scripts, bootstrap and deploy helpers
-
-## Architecture
-
-```
-career-os/
-├── frontend/          # React + Vite dashboard
-├── backend/           # FastAPI API, workers, automation
-├── extension/         # Career Lens Chrome extension (LinkedIn pairing)
-├── docs/              # Engineering & product documentation portal
-├── infra/             # Docker, nginx, CI, deployment scripts
-├── docker-compose.yml # Redis (+ optional full stack profile)
-└── backend/.env.example
+  User --> Vercel
+  Vercel -->|REST + WSS| API
+  API --> Atlas
+  SW --> Atlas
+  AW --> Atlas
+  SW -.->|realtime_events| Atlas
+  API -.->|RealtimeBridge| Atlas
 ```
 
-| Backend package | Purpose |
-|-----------------|---------|
-| `api/` | HTTP routes (jobs, scans, auth, automation, AI, system) |
-| `auth/` | JWT, OAuth, password reset |
-| `core/` | Config, Celery, Redis, cache, metrics, rate limit |
-| `services/` | Business logic, job sources, resume/interview AI |
-| `automation/` | Playwright browser manager and session storage |
-| `queues/` | Celery task definitions |
-| `realtime/` | WebSocket manager and event streams |
-| `workers/` | Celery worker entry |
+### Why distributed monolith (not microservices)?
 
-MongoDB is intended for **MongoDB Atlas**. Redis runs locally via Docker (or in compose for staging/production).
+| Goal | Approach |
+|------|----------|
+| API stays fast at login | Heavy scans on **scan-worker** |
+| Free-tier Render | Mongo queues, no mandatory Redis |
+| One team, one release | Single repo, shared models |
+| Scale path exists | More workers, optional Celery later |
 
-## Tech stack
+We **do not** hide workers or queues — they are documented in [docs/architecture/](docs/architecture/).
 
-**Frontend:** React 19, Vite, TypeScript, Tailwind CSS v4, shadcn/ui, lazy-loaded routes
+### Render services
 
-**Backend:** FastAPI, Motor/PyMongo, Celery, Redis, Playwright, Google Gemini, Resend, Cloudinary
+| Service | Role |
+|---------|------|
+| **career-os** (API) | REST, auth, WebSocket, enqueue scans, realtime bridge |
+| **career-os-scan-worker** | Mongo queue consumer, APScheduler, Playwright scans |
+| **career-os-automation** | Automation worker (health + future browser jobs) |
 
-**Infrastructure:** Docker, nginx, GitHub Actions
+Frontend: **Vercel** (`frontend/`). Database: **MongoDB Atlas**.
 
-## Local setup
+---
+
+## Queue & synchronization (Mongo, not Redis)
+
+| Collection | Purpose |
+|------------|---------|
+| `scan_execution_tasks` | Scan job queue (`queued` → `claimed` → `running` → …) |
+| `scan_states` | Progress % for polling (`GET /scans/status/{id}`) |
+| `realtime_events` | Cross-service WebSocket bus (workers publish, API bridge delivers) |
+
+**Production default:** `CELERY_ENABLED=false`, `REDIS_ENABLED=false`. Celery/Redis code paths exist for future scale — see [docs/architecture/scaling-strategy.md](docs/architecture/scaling-strategy.md).
+
+### Realtime flow
+
+```
+scan-worker → Mongo realtime_events → API RealtimeBridgeLoop → WebSocket → browser
+                                      ↘
+                    GET /scans/status (polling fallback — required)
+```
+
+---
+
+## Infrastructure stack
+
+| Layer | Technology |
+|-------|------------|
+| Frontend | React 19, Vite, TypeScript, Tailwind, shadcn/ui |
+| API | FastAPI, Python 3.12 |
+| Database | MongoDB Atlas |
+| Cache (optional) | Upstash Redis REST |
+| Automation | Playwright (Chromium) |
+| Scheduler | APScheduler (on scan-worker in prod) |
+| AI / email / files | Gemini, Resend, Cloudinary |
+| Deploy | Vercel + Render Docker |
+
+---
+
+## Free-tier optimization
+
+- Mongo-backed scan queue and realtime bus (no always-on Redis)
+- TTL indexes on operational collections (7–30 day retention)
+- API does not run heavy scans in dispatch mode
+- Workers expose health HTTP (Render requires open `PORT`)
+- UptimeRobot keep-alive on API `/health`
+
+Details: [docs/architecture/free-tier-strategy.md](docs/architecture/free-tier-strategy.md)
+
+---
+
+## Local development
 
 ### Prerequisites
 
-- Node.js 20+
-- Python 3.12+
-- Docker Desktop (for Redis)
+- Node.js 20+, Python 3.12+, Docker (optional Redis for local features)
 
-### 1. Environment
-
-Copy the example env and fill in your values (never commit `.env` or `backend/.env.*`):
+### Quick monolith (simplest)
 
 ```bash
-cd backend
-cp .env.example .env
-# Edit .env — Atlas URI, Gemini, Resend, Cloudinary, JWT secret, etc.
-```
-
-Optional environment-specific files (gitignored): `.env.development`, `.env.production`, `.env.staging`.
-
-### 2. Redis
-
-```bash
-docker compose up redis -d
-```
-
-### 3. Backend
-
-```bash
-cd backend
-python -m venv venv
-# Windows: venv\Scripts\activate
-# macOS/Linux: source venv/bin/activate
-pip install -r requirements.txt
-playwright install chromium
+cd backend && cp .env.example .env  # fill MONGO_URI, keys
+pip install -r requirements.txt && playwright install chromium
 uvicorn app.main:app --reload
+
+cd frontend && npm install && npm run dev
 ```
 
-- API: [http://127.0.0.1:8000](http://127.0.0.1:8000)
-- Health: [http://127.0.0.1:8000/health](http://127.0.0.1:8000/health)
-- OpenAPI: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
-
-### 4. Frontend
+### Production-like (API + worker)
 
 ```bash
-cd frontend
-npm install
-npm run dev
+# Terminal 1
+cd backend && python start_api.py
+
+# Terminal 2
+cd backend && python start_scan_worker.py
 ```
 
-- App: [http://localhost:5173](http://localhost:5173) (landing → sign in → dashboard)
+See [docs/developer-guide/debugging-distributed.md](docs/developer-guide/debugging-distributed.md).
 
-### 5. Tests (backend)
+---
+
+## Production deployment
+
+1. Deploy **career-os** API — `python start_api.py` — [render.yaml](render.yaml)
+2. Deploy **career-os-scan-worker** — `python start_scan_worker.py`
+3. Deploy **career-os-automation** — `python start_automation_worker.py` (manual service if not in blueprint)
+4. Deploy **Vercel** with `VITE_API_BASE_URL` / `VITE_WS_BASE_URL`
+5. UptimeRobot → `HEAD /health` on API
+
+Full guide: [docs/deployment/render-vercel-deployment.md](docs/deployment/render-vercel-deployment.md)
+
+### Production env (API excerpt)
+
+```env
+SERVICE_MODE=api
+SCAN_EXECUTION_MODE=dispatch
+ENABLE_SCHEDULER=false
+ENABLE_REALTIME=true
+REALTIME_BRIDGE_ENABLED=true
+```
+
+---
+
+## Repository layout
+
+```text
+career-os/
+├── frontend/          # React SPA
+├── backend/           # FastAPI + workers (start_*.py)
+├── extension/         # Career Lens Chrome extension
+├── docs/              # Full documentation portal
+├── infra/             # Docker, nginx, scripts
+└── render.yaml
+```
+
+---
+
+## Known limitations (honest)
+
+| Limitation | Impact |
+|------------|--------|
+| Render cold starts | Slow first request after idle |
+| Worker poll interval (~8s) | Queue pickup delay |
+| Realtime bridge (~1.5s) | WS slightly behind state |
+| Single concurrent scan per worker default | Throughput cap |
+| Indeed / some boards | Datacenter IPs often **403** — partial results |
+| WebSocket | Best-effort; **polling required** for reliability |
+| Automation worker | Early stage — most Playwright on scan-worker |
+| Atlas M0 512MB | TTL discipline required |
+
+---
+
+## Security
+
+- JWT auth, user-scoped data, secrets in Render env only
+- Workers are not public APIs (health endpoints only)
+- See [docs/architecture/security-model.md](docs/architecture/security-model.md)
+
+---
+
+## Roadmap
+
+| Phase | Status |
+|-------|--------|
+| Distributed runtime + Mongo queue | **Done** |
+| Mongo scan state + realtime bridge | **Done** |
+| TTL / storage protection | **Done** |
+| Redis/Celery production queue | **Planned** |
+| Full automation worker dequeue | **Planned** |
+| Job archival (90d+) | **Planned** |
+
+[docs/project-status/current-phase.md](docs/project-status/current-phase.md) · [docs/roadmap/future-roadmap.md](docs/roadmap/future-roadmap.md)
+
+---
+
+## Tests
 
 ```bash
-cd backend
-REDIS_ENABLED=false pytest tests/
+cd backend && REDIS_ENABLED=false pytest tests/
 ```
 
-### Optional: full Docker stack
-
-```bash
-docker compose --profile full up --build
-```
-
-See `infra/README.md` for staging/production compose and deployment notes.
-
-## Deploy (Vercel + Render)
-
-| Layer | Host | Config |
-|-------|------|--------|
-| Frontend | **Vercel** (`frontend/` root) | `frontend/.env.example`, `frontend/vercel.json` |
-| API | **Render** (Docker) | `render.yaml`, `backend/Dockerfile` |
-
-1. Deploy API on Render (Blueprint or Docker web service) — see **[docs/deployment/render-vercel-deployment.md](docs/deployment/render-vercel-deployment.md)** (also [docs/DEPLOY.md](docs/DEPLOY.md)).
-2. Set `MONGO_URI`, `JWT_SECRET_KEY`, `FRONTEND_URL`, and other secrets on Render.
-3. Deploy frontend on Vercel with **Root Directory** = `frontend`.
-4. Set `VITE_API_BASE_URL` and `VITE_WS_BASE_URL` to your Render URL (`https://` / `wss://`).
-
-```bash
-# Local frontend → production API
-cd frontend && cp .env.example .env
-# VITE_API_BASE_URL=https://your-api.onrender.com
-```
-
-## Browser automation profiles
-
-Playwright stores per-user session cookies under `backend/app/automation/profiles/`. This directory is **gitignored** (sessions, apply flags, `session_metadata.json`). Only `.gitkeep` placeholders and `session_metadata.example.json` are tracked. Copy the example to `session_metadata.json` locally if your setup expects it.
-
-## Security notes
-
-- Do not commit `backend/.env`, `.env.development`, `.env.production`, or `.env.staging`
-- Use strong `JWT_SECRET_KEY` in production
-- Set `AUTH_DEV_EXPOSE_OTP=false` outside local dev
-- Rotate keys if any secret was ever committed
+---
 
 ## License
 

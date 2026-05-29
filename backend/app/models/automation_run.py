@@ -2,6 +2,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from app.core.mongo_timestamps import coerce_to_iso
+
 AutomationRunType = Literal[
     "daily_scan",
     "high_match_alert",
@@ -44,8 +46,8 @@ class AutomationRunDocument(BaseModel):
             providers_succeeded=document.get("providers_succeeded") or [],
             providers_failed=document.get("providers_failed") or [],
             error=document.get("error", ""),
-            started_at=document["started_at"],
-            completed_at=document.get("completed_at", ""),
+            started_at=coerce_to_iso(document.get("started_at")),
+            completed_at=coerce_to_iso(document.get("completed_at")) if document.get("completed_at") else "",
             metadata=document.get("metadata") or {},
         )
 

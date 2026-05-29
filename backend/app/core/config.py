@@ -114,6 +114,11 @@ class Settings(BaseSettings):
     SCAN_TASK_CLAIM_TIMEOUT_SECONDS: int = 300
     SCAN_TASK_EXECUTION_TIMEOUT_SECONDS: int = 7200
 
+    # Phase 6 — Mongo cross-service realtime bridge (API only)
+    REALTIME_BRIDGE_ENABLED: bool = True
+    REALTIME_BRIDGE_POLL_SECONDS: float = 1.5
+    REALTIME_BRIDGE_BATCH_SIZE: int = 32
+
     # Upstash Redis REST (response caching)
     UPSTASH_REDIS_REST_URL: str = ""
     UPSTASH_REDIS_REST_TOKEN: str = ""

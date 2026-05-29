@@ -1,5 +1,7 @@
 # System overview
 
+> **Updated architecture:** This page is legacy. Use **[overview.md](./overview.md)** and **[diagrams.md](./diagrams.md)** for the current distributed runtime (API + scan-worker + automation, Mongo queues).
+
 ## High-level architecture
 
 ```mermaid

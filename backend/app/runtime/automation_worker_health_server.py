@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import logging
+
 import uvicorn
-from fastapi import FastAPI
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse, Response
+
+logger = logging.getLogger(__name__)
 
 # Single app instance — no docs, no middleware, no WebSocket/realtime.
 _health_app = FastAPI(
@@ -15,8 +19,11 @@ _health_app = FastAPI(
 )
 
 
-@_health_app.get("/health", include_in_schema=False)
-async def health() -> JSONResponse:
+@_health_app.api_route("/health", methods=["GET", "HEAD"], include_in_schema=False)
+async def health(request: Request) -> Response:
+    logger.info("[HEALTH_CHECK] method=%s", request.method)
+    if request.method == "HEAD":
+        return Response(status_code=200)
     return JSONResponse({"status": "ok", "service": "automation-worker"})
 
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from app.core.config import settings
@@ -37,9 +38,10 @@ async def bootstrap_core(*, run_migrations: bool = True) -> None:
         await seed_demo_users()
 
 
-async def bootstrap_api_subsystems() -> object | None:
-    """Start API-specific subsystems; returns realtime asyncio task if any."""
-    realtime_task = None
+async def bootstrap_api_subsystems() -> list[asyncio.Task]:
+    """Start API-specific subsystems; returns background asyncio tasks to cancel on shutdown."""
+    background_tasks: list[asyncio.Task] = []
+
     if runtime.should_start_scheduler():
         logger.info(
             "[STARTUP] Scheduler owner=%s (mode=%s)",
@@ -58,13 +60,26 @@ async def bootstrap_api_subsystems() -> object | None:
         )
 
     if runtime.should_start_realtime():
+        from app.realtime.realtime_bridge_loop import start_realtime_bridge_loop
         from app.realtime.redis_bridge import start_realtime_subscriber
 
-        realtime_task = await start_realtime_subscriber()
+        bridge_task = await start_realtime_bridge_loop()
+        if bridge_task is not None:
+            background_tasks.append(bridge_task)
+
+        redis_task = await start_realtime_subscriber()
+        if redis_task is not None:
+            background_tasks.append(redis_task)
+
         logger.info(
-            "[STARTUP] Realtime subscriber state=%s",
-            "started" if realtime_task else "in_process_only",
-            extra={"event": "startup", "realtime": "enabled"},
+            "[STARTUP] Realtime bridge=%s redis_subscriber=%s",
+            bridge_task is not None,
+            redis_task is not None,
+            extra={
+                "event": "startup",
+                "realtime": "enabled",
+                "realtime_bridge": bridge_task is not None,
+            },
         )
     else:
         logger.info(
@@ -74,7 +89,7 @@ async def bootstrap_api_subsystems() -> object | None:
         )
 
     await log_startup_verification()
-    return realtime_task
+    return background_tasks
 
 
 async def bootstrap_scan_worker_subsystems() -> None:
@@ -99,9 +114,10 @@ async def bootstrap_automation_worker_subsystems() -> None:
     await log_startup_verification()
 
 
-async def shutdown_api_subsystems(realtime_task: object | None) -> None:
-    if realtime_task is not None:
-        realtime_task.cancel()  # type: ignore[attr-defined]
+async def shutdown_api_subsystems(background_tasks: list[asyncio.Task] | None) -> None:
+    if background_tasks:
+        for task in background_tasks:
+            task.cancel()
     if runtime.should_start_scheduler():
         await shutdown_scheduler()
     if runtime.should_start_automation_shutdown():

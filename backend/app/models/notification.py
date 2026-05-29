@@ -2,6 +2,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from app.core.mongo_timestamps import coerce_to_iso
+
 NotificationType = Literal[
     "high_match",
     "daily_digest",
@@ -50,7 +52,7 @@ class NotificationDocument(BaseModel):
             read=document.get("read", False),
             metadata=document.get("metadata") or {},
             preference_id=document.get("preference_id", ""),
-            created_at=document["created_at"],
+            created_at=coerce_to_iso(document.get("created_at")),
         )
 
 

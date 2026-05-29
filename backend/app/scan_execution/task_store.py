@@ -9,6 +9,7 @@ from typing import Any
 
 from app.core.config import settings
 from app.core.database import get_database
+from app.core.mongo_timestamps import ttl_created_at
 from app.scan_execution.models import ScanExecutionTask, ScanTaskKind, ScanTaskStatus
 
 logger = logging.getLogger(__name__)
@@ -46,6 +47,7 @@ def new_task_id() -> str:
 
 async def insert_task(task: ScanExecutionTask) -> ScanExecutionTask:
     doc = task.to_mongo()
+    doc["created_at"] = ttl_created_at(doc.get("created_at"))
     try:
         await _collection().insert_one(doc)
         logger.info(

@@ -67,6 +67,22 @@ class ScanExecutionTask(BaseModel):
             payload["kind"] = ScanTaskKind(payload["kind"])
         if "status" in payload and not isinstance(payload["status"], ScanTaskStatus):
             payload["status"] = ScanTaskStatus(payload["status"])
+        if "created_at" in payload:
+            from app.core.mongo_timestamps import coerce_to_iso
+
+            payload["created_at"] = coerce_to_iso(payload["created_at"])
+        if "started_at" in payload and payload["started_at"]:
+            from app.core.mongo_timestamps import coerce_to_iso
+
+            payload["started_at"] = coerce_to_iso(payload["started_at"])
+        if "completed_at" in payload and payload["completed_at"]:
+            from app.core.mongo_timestamps import coerce_to_iso
+
+            payload["completed_at"] = coerce_to_iso(payload["completed_at"])
+        if "claimed_at" in payload and payload["claimed_at"]:
+            from app.core.mongo_timestamps import coerce_to_iso
+
+            payload["claimed_at"] = coerce_to_iso(payload["claimed_at"])
         return cls.model_validate(payload)
 
     def to_public_dict(self) -> dict[str, Any]:

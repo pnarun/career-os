@@ -3,12 +3,22 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from motor.motor_asyncio import AsyncIOMotorDatabase
+from pymongo.errors import OperationFailure
 
 from app.core.database import get_database
+from app.core.retention import (
+    AUTOMATION_RUN_RETENTION_DAYS,
+    BROWSER_SESSION_RETENTION_DAYS,
+    NOTIFICATION_RETENTION_DAYS,
+    REALTIME_EVENT_RETENTION_DAYS,
+    SCAN_STATE_RETENTION_DAYS,
+    SCAN_TASK_RETENTION_DAYS,
+    days_to_expire_seconds,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -182,6 +192,55 @@ COLLECTION_INDEX_REGISTRY: dict[str, list[IndexSpec]] = {
     "apply_errors": [
         _idx([("created_at", -1)], "apply_errors_created"),
     ],
+    "realtime_events": [
+        _idx([("created_at", 1)], "realtime_events_created"),
+        _idx([("processed", 1), ("created_at", 1)], "realtime_events_processed_created"),
+        _idx([("user_id", 1), ("created_at", -1)], "realtime_events_user_created", sparse=True),
+        _idx([("scan_id", 1), ("created_at", -1)], "realtime_events_scan_created", sparse=True),
+        _idx([("workspace_id", 1), ("created_at", -1)], "realtime_events_workspace_created", sparse=True),
+    ],
+}
+
+
+@dataclass(frozen=True)
+class TtlIndexSpec:
+    field: str
+    retention_days: int
+    name: str
+    optional_collection: bool = False
+
+
+TTL_INDEX_REGISTRY: dict[str, TtlIndexSpec] = {
+    "scan_states": TtlIndexSpec(
+        "updated_at",
+        SCAN_STATE_RETENTION_DAYS,
+        "scan_states_ttl",
+    ),
+    "scan_execution_tasks": TtlIndexSpec(
+        "created_at",
+        SCAN_TASK_RETENTION_DAYS,
+        "scan_execution_tasks_ttl",
+    ),
+    "browser_sessions": TtlIndexSpec(
+        "updated_at",
+        BROWSER_SESSION_RETENTION_DAYS,
+        "browser_sessions_ttl",
+    ),
+    "notifications": TtlIndexSpec(
+        "created_at",
+        NOTIFICATION_RETENTION_DAYS,
+        "notifications_ttl",
+    ),
+    "realtime_events": TtlIndexSpec(
+        "created_at",
+        REALTIME_EVENT_RETENTION_DAYS,
+        "realtime_events_ttl",
+    ),
+    "automation_runs": TtlIndexSpec(
+        "started_at",
+        AUTOMATION_RUN_RETENTION_DAYS,
+        "automation_runs_ttl",
+    ),
 }
 
 
@@ -239,6 +298,110 @@ async def ensure_collection_indexes(
     return created
 
 
+async def ensure_ttl_indexes(*, database: AsyncIOMotorDatabase | None = None) -> list[str]:
+    """Create TTL indexes idempotently; never fail application startup."""
+    db = get_database() if database is None else database
+    existing_collections = set(await db.list_collection_names())
+    ensured: list[str] = []
+
+    for collection_name, spec in TTL_INDEX_REGISTRY.items():
+        if spec.optional_collection and collection_name not in existing_collections:
+            logger.debug(
+                "TTL skip optional collection=%s (not present)",
+                collection_name,
+            )
+            continue
+
+        collection = db[collection_name]
+        expire_seconds = days_to_expire_seconds(spec.retention_days)
+
+        try:
+            index_info = await collection.index_information()
+            if spec.name in index_info:
+                logger.info(
+                    "[TTL_INDEX_EXISTS] collection=%s index=%s expireAfterSeconds=%s",
+                    collection_name,
+                    spec.name,
+                    index_info[spec.name].get("expireAfterSeconds"),
+                    extra={
+                        "event": "TTL_INDEX_EXISTS",
+                        "collection": collection_name,
+                        "index": spec.name,
+                    },
+                )
+                ensured.append(spec.name)
+                continue
+        except Exception as exc:
+            logger.debug(
+                "TTL index_information failed collection=%s: %s",
+                collection_name,
+                exc,
+            )
+
+        try:
+            await collection.create_index(
+                [(spec.field, 1)],
+                name=spec.name,
+                expireAfterSeconds=expire_seconds,
+                background=True,
+            )
+            logger.info(
+                "[TTL_INDEX_CREATED] collection=%s index=%s field=%s expireAfterSeconds=%s",
+                collection_name,
+                spec.name,
+                spec.field,
+                expire_seconds,
+                extra={
+                    "event": "TTL_INDEX_CREATED",
+                    "collection": collection_name,
+                    "index": spec.name,
+                    "field": spec.field,
+                    "expire_after_seconds": expire_seconds,
+                },
+            )
+            ensured.append(spec.name)
+        except OperationFailure as exc:
+            code = getattr(exc, "code", None)
+            if code in (85, 86):  # IndexOptionsConflict, IndexKeySpecsConflict
+                logger.info(
+                    "[TTL_INDEX_EXISTS] collection=%s index=%s",
+                    collection_name,
+                    spec.name,
+                    extra={
+                        "event": "TTL_INDEX_EXISTS",
+                        "collection": collection_name,
+                        "index": spec.name,
+                    },
+                )
+                ensured.append(spec.name)
+            else:
+                logger.warning(
+                    "TTL index create failed collection=%s index=%s: %s",
+                    collection_name,
+                    spec.name,
+                    exc,
+                    extra={
+                        "event": "TTL_INDEX_FAILED",
+                        "collection": collection_name,
+                        "index": spec.name,
+                    },
+                )
+        except Exception as exc:
+            logger.warning(
+                "TTL index create failed collection=%s index=%s: %s",
+                collection_name,
+                spec.name,
+                exc,
+                extra={
+                    "event": "TTL_INDEX_FAILED",
+                    "collection": collection_name,
+                    "index": spec.name,
+                },
+            )
+
+    return ensured
+
+
 async def ensure_all_mongo_indexes(*, force: bool = False) -> dict[str, list[str]]:
     """
     Ensure all registered indexes once per process (unless force=True).
@@ -257,10 +420,17 @@ async def ensure_all_mongo_indexes(*, force: bool = False) -> dict[str, list[str
             database=db,
         )
 
+    ttl_indexes = await ensure_ttl_indexes(database=db)
+
     _INDEX_ENSURED = True
     logger.info(
-        "Mongo index initialization complete collections=%d",
+        "Mongo index initialization complete collections=%d ttl_indexes=%d",
         len(summary),
-        extra={"event": "mongo_indexes_ready", "collections": len(summary)},
+        len(ttl_indexes),
+        extra={
+            "event": "mongo_indexes_ready",
+            "collections": len(summary),
+            "ttl_indexes": ttl_indexes,
+        },
     )
     return summary

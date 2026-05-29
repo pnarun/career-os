@@ -6,6 +6,7 @@ import logging
 import os
 from typing import Any
 
+from app.core.mongo_timestamps import ttl_updated_at
 from app.models.scan_state import ScanState
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,13 @@ def save_scan_state(state: ScanState) -> bool:
     try:
         doc: dict[str, Any] = state.model_dump(mode="json")
         doc["scan_id"] = state.scan_id
+        doc["updated_at"] = ttl_updated_at()
+        if state.started_at:
+            from app.core.mongo_timestamps import coerce_to_datetime
+
+            started_dt = coerce_to_datetime(state.started_at)
+            if started_dt is not None:
+                doc["started_at"] = started_dt
         col.replace_one({"scan_id": state.scan_id}, doc, upsert=True)
         logger.info(
             "[SCAN_PROGRESS_WRITE] scan_id=%s status=%s progress=%s",
@@ -66,6 +74,10 @@ def load_scan_state(scan_id: str) -> ScanState | None:
             return None
         payload = dict(doc)
         payload.pop("_id", None)
+        if "started_at" in payload:
+            from app.core.mongo_timestamps import coerce_to_iso
+
+            payload["started_at"] = coerce_to_iso(payload["started_at"])
         return ScanState.model_validate(payload)
     except Exception as exc:
         logger.debug("scan_states mongo load failed scan_id=%s: %s", scan_id, exc)

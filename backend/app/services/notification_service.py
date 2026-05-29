@@ -10,6 +10,7 @@ from bson.errors import InvalidId
 from motor.motor_asyncio import AsyncIOMotorCollection
 
 from app.core.database import get_database
+from app.core.mongo_timestamps import coerce_to_iso, ttl_created_at, ttl_updated_at
 from app.models.automation_run import AutomationRunDocument
 from app.models.job import JobDocument
 from app.models.notification import (
@@ -72,7 +73,6 @@ async def ensure_notification_indexes() -> None:
 
 async def create_notification(payload: NotificationCreate) -> NotificationDocument:
     collection = _get_notifications_collection()
-    now = _utc_now_iso()
     document: dict[str, Any] = {
         "type": payload.type,
         "title": payload.title.strip(),
@@ -82,7 +82,7 @@ async def create_notification(payload: NotificationCreate) -> NotificationDocume
         "read": False,
         "metadata": payload.metadata or {},
         "preference_id": payload.preference_id.strip(),
-        "created_at": now,
+        "created_at": ttl_created_at(),
     }
     result = await collection.insert_one(document)
     document["_id"] = result.inserted_id
@@ -155,7 +155,7 @@ async def start_automation_run(
     preference_id: str = "",
 ) -> str:
     collection = _get_runs_collection()
-    now = _utc_now_iso()
+    started = ttl_created_at()
     document = {
         "run_type": run_type,
         "status": "running",
@@ -167,7 +167,8 @@ async def start_automation_run(
         "providers_succeeded": [],
         "providers_failed": [],
         "error": "",
-        "started_at": now,
+        "started_at": started,
+        "created_at": started,
         "completed_at": "",
         "metadata": {},
     }
@@ -206,7 +207,7 @@ async def complete_automation_run(
                 "providers_succeeded": providers_succeeded or [],
                 "providers_failed": providers_failed or [],
                 "error": error,
-                "completed_at": _utc_now_iso(),
+                "completed_at": ttl_updated_at(),
                 "metadata": metadata or {},
             }
         },

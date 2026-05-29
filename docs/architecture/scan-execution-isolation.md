@@ -184,3 +184,27 @@ SCHEDULER_STARTUP_CATCHUP=false
 
 - **Phase 2** — Redis queue + Celery; same task model and route contracts
 - **Phase 3** — Dedicated automation worker for Playwright isolation
+
+## Phase 6 — Cross-service realtime (Mongo event bus)
+
+Workers cannot reach API WebSocket clients directly. Scan/automation events are **also** written to MongoDB `realtime_events`; the API runs `RealtimeBridgeLoop` (poll ~1.5s) to fan out to connected clients.
+
+```mermaid
+sequenceDiagram
+  participant SW as scan-worker
+  participant Mongo as realtime_events
+  participant API as career-os API
+  participant FE as frontend
+
+  SW->>Mongo: publish scan_progress
+  SW->>Mongo: update scan_states
+  loop RealtimeBridgeLoop
+    API->>Mongo: claim unprocessed events
+    API->>FE: WebSocket send_json
+  end
+  FE->>API: GET /scans/status (fallback poll)
+```
+
+- **Polling unchanged** — `GET /scans/status/{scan_id}` remains the reliability fallback.
+- **TTL** — `realtime_events_ttl` on `created_at` (1 day).
+- **Env** — `REALTIME_BRIDGE_ENABLED=true` on API only; workers need `MONGO_URI` only.

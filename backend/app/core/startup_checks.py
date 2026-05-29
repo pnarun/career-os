@@ -8,7 +8,9 @@ from app.core.config import settings
 from app.core.database import get_database
 from app.core.redis_client import get_redis, redis_health
 from app.core.runtime_diagnostics import process_memory_snapshot
+from app.core.storage_report import log_storage_report
 from app.realtime.websocket_manager import realtime_manager
+from app.runtime.service_mode import runtime
 from app.services.scheduler_service import get_scheduler_health_snapshot
 
 logger = logging.getLogger(__name__)
@@ -62,6 +64,7 @@ async def log_startup_verification() -> None:
             "enable_realtime": settings.ENABLE_REALTIME,
             "enable_automation": settings.ENABLE_AUTOMATION,
             "service_mode": settings.SERVICE_MODE,
+            "realtime_bridge": runtime.should_start_realtime_bridge(),
             "scan_execution_mode": settings.SCAN_EXECUTION_MODE,
             "process_memory": memory,
         },
@@ -75,3 +78,5 @@ async def log_startup_verification() -> None:
     client = get_redis()
     if settings.REDIS_ENABLED and client is None and redis_status != "disabled":
         logger.warning("Redis client not initialized — check REDIS_URL")
+
+    await log_storage_report()

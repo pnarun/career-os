@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Header, HTTPException, Query
+from fastapi import APIRouter, Header, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
 
@@ -247,24 +247,15 @@ async def cron_scheduled_scans(
     return await run_overdue_scheduled_scans()
 
 
-def _log_health_ping_if_debug() -> None:
-    if settings.ENVIRONMENT == "development" or settings.LOG_LEVEL.upper() == "DEBUG":
-        logger.debug("[HEALTH] keepalive ping")
-
-
-@router.head("/health")
-async def health_head() -> Response:
-    """UptimeRobot free tier uses HEAD — empty 200, no DB or scheduler work."""
-    _log_health_ping_if_debug()
-    return Response(status_code=200)
-
-
-@router.get("/health")
-async def health_get(
+@router.api_route("/health", methods=["GET", "HEAD"])
+async def health(
+    request: Request,
     detail: bool = Query(False, description="Include mongo, websocket, scan & provider subsystems"),
-) -> dict[str, Any]:
-    """Health check. Default is minimal keep-alive; ?detail=1 for beta subsystem snapshot."""
-    _log_health_ping_if_debug()
+) -> Response | dict[str, Any]:
+    """Health check. HEAD returns empty 200 (UptimeRobot). GET returns keep-alive JSON."""
+    logger.info("[HEALTH_CHECK] method=%s", request.method)
+    if request.method == "HEAD":
+        return Response(status_code=200)
     if detail:
         return await build_detailed_health_payload(service=settings.APP_NAME)
     return get_cached_health_payload(

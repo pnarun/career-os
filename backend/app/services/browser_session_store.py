@@ -15,6 +15,7 @@ from app.automation.browser.session_manager import (
     _session_path,
 )
 from app.core.database import DATABASE_NAME, get_database
+from app.core.mongo_timestamps import ttl_updated_at
 
 logger = logging.getLogger(__name__)
 
@@ -132,7 +133,7 @@ async def save_storage_state(
         "user_id": uid,
         "platform": key,
         "storage_state": storage_state,
-        "updated_at": _utc_now_iso(),
+        "updated_at": ttl_updated_at(),
         "cookie_count": _count_cookies(storage_state),
         "storage_size_kb": _size_kb(storage_state),
         "status": status,
@@ -362,7 +363,7 @@ def save_storage_state_sync(
         "user_id": uid,
         "platform": key,
         "storage_state": storage_state,
-        "updated_at": _utc_now_iso(),
+        "updated_at": ttl_updated_at(),
         "cookie_count": _count_cookies(storage_state),
         "storage_size_kb": _size_kb(storage_state),
         "status": status,

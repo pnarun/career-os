@@ -45,10 +45,10 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    realtime_task = None
+    background_tasks: list = []
     try:
         await bootstrap_core()
-        realtime_task = await bootstrap_api_subsystems()
+        background_tasks = await bootstrap_api_subsystems()
         logger.info("Application ready", extra={"event": "startup", "status": "ok"})
     except Exception:
         logger.exception(
@@ -57,7 +57,7 @@ async def lifespan(app: FastAPI):
         )
         raise
     yield
-    await shutdown_api_subsystems(realtime_task)
+    await shutdown_api_subsystems(background_tasks)
 
 
 app = FastAPI(
