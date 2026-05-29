@@ -32,6 +32,13 @@ async def publish_realtime_event(user_id: str, payload: dict[str, Any]) -> None:
 
 async def start_realtime_subscriber() -> asyncio.Task | None:
     """Subscribe to Redis and forward events to in-process WebSocket pool."""
+    if not settings.ENABLE_REALTIME:
+        logger.info(
+            "[REALTIME] Subscriber not started — ENABLE_REALTIME=false",
+            extra={"event": "realtime_subscriber", "status": "disabled"},
+        )
+        return None
+
     if not settings.REDIS_ENABLED:
         return None
 
@@ -54,7 +61,10 @@ async def start_realtime_subscriber() -> asyncio.Task | None:
                 payload = data.get("payload", {})
                 if user_id and payload:
                     await realtime_manager.send_to_user(user_id, payload)
-            except Exception as exc:
-                logger.warning("Realtime subscriber parse error: %s", exc)
+            except Exception:
+                logger.exception(
+                    "[REALTIME] subscriber parse/dispatch error",
+                    extra={"event": "realtime_subscriber_error"},
+                )
 
     return asyncio.create_task(_loop())

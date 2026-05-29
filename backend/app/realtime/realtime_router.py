@@ -25,6 +25,11 @@ async def realtime_websocket(
     token: str = Query(default=""),
 ) -> None:
     """Authenticated WebSocket for user-scoped real-time events."""
+    if not settings.ENABLE_REALTIME:
+        logger.info("[REALTIME] connection rejected: realtime disabled by config")
+        await _reject_websocket(websocket, 4503, "Realtime disabled")
+        return
+
     if not token:
         logger.debug("[REALTIME] connection rejected: missing token")
         await _reject_websocket(websocket, 4401, "Missing token")
@@ -74,7 +79,11 @@ async def realtime_websocket(
     except WebSocketDisconnect:
         pass
     except Exception:
-        logger.exception("[REALTIME] websocket error user=%s", user_id)
+        logger.exception(
+            "[REALTIME] websocket error user=%s",
+            user_id,
+            extra={"event": "websocket_error", "user_id": user_id},
+        )
     finally:
         await realtime_manager.disconnect(websocket, user.id)
         clear_request_user()

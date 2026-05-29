@@ -27,6 +27,7 @@ from app.core.config import settings
 from app.core.database import get_database
 from app.core.metrics import metrics
 from app.observability.operational_metrics import observability_snapshot
+from app.core.runtime_diagnostics import process_memory_snapshot
 from app.core.redis_client import redis_health
 from app.realtime.websocket_manager import realtime_manager
 
@@ -173,6 +174,7 @@ async def _mongo_health() -> dict[str, Any]:
         await db.command("ping")
         return {"status": "ok"}
     except Exception as exc:
+        logger.debug("Mongo health check failed in system_status: %s", exc, exc_info=True)
         return {"status": "down", "error": str(exc)}
 
 
@@ -187,6 +189,12 @@ def _queue_health() -> dict[str, Any]:
         backlog = sum(len(v or []) for v in (active or {}).values()) if active else 0
         return {"status": "ok", "backlog": backlog}
     except Exception as exc:
+        logger.warning(
+            "Celery queue health check failed: %s",
+            exc,
+            exc_info=True,
+            extra={"event": "queue_health", "status": "degraded"},
+        )
         return {"status": "degraded", "backlog": 0, "error": str(exc)}
 
 
@@ -337,5 +345,12 @@ async def system_status() -> dict[str, Any]:
             "redis": settings.REDIS_ENABLED,
             "rate_limit": settings.RATE_LIMIT_ENABLED,
             "queue_scans": settings.QUEUE_SCANS_ENABLED,
+            "enable_scheduler": settings.ENABLE_SCHEDULER,
+            "enable_playwright": settings.ENABLE_PLAYWRIGHT,
+            "enable_realtime": settings.ENABLE_REALTIME,
+            "enable_automation": settings.ENABLE_AUTOMATION,
+            "scheduler_startup_catchup": settings.SCHEDULER_STARTUP_CATCHUP,
         },
+        "process_memory": process_memory_snapshot(),
+        "service_mode": settings.SERVICE_MODE,
     }

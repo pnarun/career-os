@@ -202,6 +202,17 @@ async def run_playwright(
     """Run a Playwright worker command in a child process."""
     import asyncio
 
+    from app.core.config import settings
+    from app.core.runtime_diagnostics import log_memory_event
+
+    if not settings.ENABLE_PLAYWRIGHT:
+        logger.warning(
+            "[AUTOMATION][WORKER] Playwright disabled (ENABLE_PLAYWRIGHT=false) command=%s",
+            command,
+            extra={"event": "playwright_disabled", "command": command},
+        )
+        return {"status": "error", "message": "Playwright disabled by configuration"}
+
     command = normalize_worker_command(command)
     logger.info("[AUTOMATION][WORKER] command=%s", command)
 
@@ -224,8 +235,12 @@ async def run_playwright(
             )
         return _run_worker(command, payload, timeout_sec=effective_timeout)
 
+    log_memory_event("PLAYWRIGHT_MEMORY_USAGE", phase="before", command=command)
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, _invoke)
+    try:
+        return await loop.run_in_executor(None, _invoke)
+    finally:
+        log_memory_event("PLAYWRIGHT_MEMORY_USAGE", phase="after", command=command)
 
 
 def shutdown_executor() -> None:

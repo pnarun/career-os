@@ -60,6 +60,8 @@ _active_open: set[str] = set()
 
 
 async def check_browser_health() -> BrowserHealthResponse:
+    if not settings.ENABLE_AUTOMATION:
+        return BrowserHealthResponse(status="disabled", message="Automation disabled by configuration")
     data = await run_playwright("health")
     return BrowserHealthResponse(**data)
 

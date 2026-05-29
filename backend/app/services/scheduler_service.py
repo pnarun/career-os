@@ -169,10 +169,16 @@ async def _execute_scheduled_scan(preference_id: str) -> None:
             return
         await run_daily_job_scan_automation(preference_id)
     except UserPreferencesServiceError as exc:
-        logger.error(
-            "[SCHEDULED_SCAN_FAILED] preference_id=%s error=%s",
+        logger.exception(
+            "[SCHEDULED_SCAN_FAILED] preference_id=%s",
             preference_id,
-            exc,
+            extra={"event": "scheduled_scan_failed", "preference_id": preference_id},
+        )
+    except Exception:
+        logger.exception(
+            "[SCHEDULED_SCAN_FAILED] preference_id=%s unexpected",
+            preference_id,
+            extra={"event": "scheduled_scan_failed", "preference_id": preference_id},
         )
     finally:
         _running_scans.discard(preference_id)
@@ -260,22 +266,31 @@ async def reload_active_schedules() -> int:
 async def _execute_follow_up_reminders() -> None:
     try:
         await run_follow_up_reminders()
-    except Exception as exc:
-        logger.error("[FOLLOW_UP_REMINDERS_FAILED] error=%s", exc)
+    except Exception:
+        logger.exception(
+            "[FOLLOW_UP_REMINDERS_FAILED]",
+            extra={"event": "scheduler_job_failed", "job": "follow_up_reminders"},
+        )
 
 
 async def _execute_interview_reminders() -> None:
     try:
         await run_interview_reminders()
-    except Exception as exc:
-        logger.error("[INTERVIEW_REMINDERS_FAILED] error=%s", exc)
+    except Exception:
+        logger.exception(
+            "[INTERVIEW_REMINDERS_FAILED]",
+            extra={"event": "scheduler_job_failed", "job": "interview_reminders"},
+        )
 
 
 async def _execute_weekly_insights() -> None:
     try:
         await run_weekly_career_insights()
-    except Exception as exc:
-        logger.error("[WEEKLY_INSIGHTS_FAILED] error=%s", exc)
+    except Exception:
+        logger.exception(
+            "[WEEKLY_INSIGHTS_FAILED]",
+            extra={"event": "scheduler_job_failed", "job": "weekly_career_insights"},
+        )
 
 
 def _register_system_jobs() -> None:
@@ -406,21 +421,45 @@ async def start_scheduler() -> None:
     """Start APScheduler and register active preference jobs."""
     from app.core.config import settings
 
+    if not settings.ENABLE_SCHEDULER:
+        logger.info(
+            "[SCHEDULER] Not started — ENABLE_SCHEDULER=false",
+            extra={"event": "scheduler", "status": "disabled"},
+        )
+        return
+
     scheduler = get_scheduler()
     if not scheduler.running:
         scheduler.start()
-        logger.info("APScheduler started")
+        logger.info("[SCHEDULER] APScheduler started", extra={"event": "scheduler", "status": "running"})
     _register_system_jobs()
     _register_heartbeat_job()
     await reload_active_schedules()
     log_scheduler_startup_summary()
 
     if settings.SCHEDULER_STARTUP_CATCHUP:
+        logger.info(
+            "[SCHEDULER] Startup catch-up enabled — checking overdue scans",
+            extra={"event": "scheduler_catchup", "enabled": True},
+        )
         try:
             catchup = await run_overdue_scheduled_scans()
-            logger.info("[SCHEDULER] Startup catch-up: %s", catchup)
-        except Exception as exc:
-            logger.error("[SCHEDULER] Startup catch-up failed: %s", exc)
+            logger.info(
+                "[SCHEDULER] Startup catch-up complete: %s",
+                catchup,
+                extra={"event": "scheduler_catchup", "result": catchup},
+            )
+        except Exception:
+            logger.exception(
+                "[SCHEDULER] Startup catch-up failed",
+                extra={"event": "scheduler_catchup", "status": "failed"},
+            )
+    else:
+        logger.info(
+            "[SCHEDULER] Startup catch-up disabled (SCHEDULER_STARTUP_CATCHUP=false) — "
+            "overdue scans will not run until next scheduled slot or manual/cron trigger",
+            extra={"event": "scheduler_catchup", "enabled": False},
+        )
 
 
 async def shutdown_scheduler() -> None:
@@ -435,6 +474,10 @@ async def shutdown_scheduler() -> None:
 
 async def sync_preference_schedule(preferences: UserPreferencesDocument) -> None:
     """Call after create/update to refresh a single scheduled job."""
+    from app.core.config import settings
+
+    if not settings.ENABLE_SCHEDULER:
+        return
     if not get_scheduler().running:
         await start_scheduler()
         return

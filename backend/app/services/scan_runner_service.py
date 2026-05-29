@@ -24,6 +24,7 @@ from app.services.job_service import (
 )
 from app.services.resume_service import ResumeNotFoundError, get_resume_by_id
 from app.core.user_context import set_request_user
+from app.core.runtime_diagnostics import log_memory_event
 from app.services.user_preferences_service import mark_email_sent
 
 logger = logging.getLogger(__name__)
@@ -178,36 +179,64 @@ async def _execute_scan(
     try:
         await get_resume_by_id(preferences.resume_id)
     except ResumeNotFoundError as exc:
-        logger.error(
+        logger.exception(
             "[SCAN_FAILED] preference_id=%s reason=resume_not_found manual=%s",
             preferences.id,
             manual,
+            extra={
+                "event": "scan_failed",
+                "preference_id": preferences.id,
+                "manual": manual,
+                "reason": "resume_not_found",
+            },
         )
         if user_id:
             await emit_scan_failed(user_id, reason="resume_not_found", manual=manual)
         raise ScanRunnerError(str(exc)) from exc
 
+    log_memory_event(
+        "MEMORY_BEFORE_SCAN",
+        preference_id=preferences.id,
+        manual=manual,
+        user_id=user_id,
+    )
     try:
         scan_summary = await discover_and_store_jobs(resume_id=preferences.resume_id)
     except JobDiscoveryError as exc:
-        logger.error(
-            "[SCAN_FAILED] preference_id=%s reason=%s manual=%s",
+        logger.exception(
+            "[SCAN_FAILED] preference_id=%s reason=job_discovery manual=%s",
             preferences.id,
-            exc,
             manual,
+            extra={
+                "event": "scan_failed",
+                "preference_id": preferences.id,
+                "manual": manual,
+            },
         )
         if user_id:
             await emit_scan_failed(user_id, reason=str(exc), manual=manual)
         raise ScanRunnerError(str(exc)) from exc
     except JobServiceError as exc:
-        logger.error(
+        logger.exception(
             "[SCAN_FAILED] preference_id=%s reason=job_service manual=%s",
             preferences.id,
             manual,
+            extra={
+                "event": "scan_failed",
+                "preference_id": preferences.id,
+                "manual": manual,
+            },
         )
         if user_id:
             await emit_scan_failed(user_id, reason="job_service_error", manual=manual)
         raise ScanRunnerError(str(exc)) from exc
+    finally:
+        log_memory_event(
+            "MEMORY_AFTER_SCAN",
+            preference_id=preferences.id,
+            manual=manual,
+            user_id=user_id,
+        )
 
     latest_jobs = await get_latest_scan_jobs()
     # Scheduled scans send one digest email from job_scan_automation_service (not here).

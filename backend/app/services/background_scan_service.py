@@ -8,6 +8,7 @@ from typing import Any, Callable
 
 from app.core.config import settings
 from app.core.user_context import clear_request_user, set_request_user
+from app.core.runtime_diagnostics import log_memory_event
 from app.services.cache_invalidation import invalidate_after_scan_complete
 from app.services.cache_service import set_json
 from app.services.job_service import (
@@ -68,6 +69,7 @@ async def execute_background_scan(
     """Run full discover pipeline; update Redis state throughout."""
     set_request_user(user_id, workspace_id, email)
     scan_started_at = time.perf_counter()
+    log_memory_event("MEMORY_BEFORE_SCAN", scan_id=scan_id, user_id=user_id)
 
     try:
         await emit_scan_started(user_id, scan_id=scan_id, manual=True)
@@ -137,15 +139,31 @@ async def execute_background_scan(
     except (JobDiscoveryError, JobServiceError, ScanRunnerError) as exc:
         duration_ms = (time.perf_counter() - scan_started_at) * 1000
         record_scan_duration(scan_id, duration_ms, status="failed")
+        logger.exception(
+            "Background scan failed scan_id=%s reason=%s",
+            scan_id,
+            type(exc).__name__,
+            extra={"event": "scan_failed", "scan_id": scan_id, "user_id": user_id},
+        )
         await emit_scan_failed(user_id, scan_id=scan_id, reason=str(exc), manual=True)
         fail_scan(scan_id, str(exc))
     except Exception as exc:
-        logger.exception("Background scan failed scan_id=%s", scan_id)
+        logger.exception(
+            "Background scan failed scan_id=%s unexpected",
+            scan_id,
+            extra={"event": "scan_failed", "scan_id": scan_id, "user_id": user_id},
+        )
         duration_ms = (time.perf_counter() - scan_started_at) * 1000
         record_scan_duration(scan_id, duration_ms, status="failed")
         await emit_scan_failed(user_id, scan_id=scan_id, reason=str(exc), manual=True)
         fail_scan(scan_id, str(exc))
     finally:
+        log_memory_event(
+            "MEMORY_AFTER_SCAN",
+            scan_id=scan_id,
+            user_id=user_id,
+            duration_ms=round((time.perf_counter() - scan_started_at) * 1000, 1),
+        )
         clear_request_user()
 
 

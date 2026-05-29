@@ -94,7 +94,11 @@ async def trigger_manual_scan(
     except UserPreferencesServiceError as exc:
         raise HTTPException(status_code=503, detail={"message": str(exc)}) from exc
     except Exception as exc:
-        logger.exception("Unexpected error during manual scan")
+        logger.exception(
+            "Unexpected error during manual scan preference_id=%s",
+            payload.preferences_id,
+            extra={"event": "manual_scan_failed", "preference_id": payload.preferences_id},
+        )
         raise HTTPException(
             status_code=500,
             detail={"message": "An unexpected error occurred"},

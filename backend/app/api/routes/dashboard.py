@@ -32,7 +32,11 @@ async def read_dashboard_summary() -> dict:
         logger.error("Dashboard summary failed: %s", exc)
         raise HTTPException(status_code=503, detail={"message": str(exc)}) from exc
     except Exception as exc:
-        logger.exception("Unexpected dashboard summary error")
+        logger.exception(
+            "Unexpected dashboard summary error user_id=%s",
+            user_id,
+            extra={"event": "dashboard_summary_failed", "user_id": user_id},
+        )
         raise HTTPException(
             status_code=500,
             detail={"message": "Failed to load dashboard summary"},

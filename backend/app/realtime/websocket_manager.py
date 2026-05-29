@@ -68,7 +68,15 @@ class RealtimeConnectionManager:
             try:
                 await ws.send_json(payload)
                 sent += 1
-            except Exception:
+            except Exception as exc:
+                logger.warning(
+                    "[REALTIME] send failed user=%s event=%s: %s",
+                    user_id,
+                    payload.get("event"),
+                    exc,
+                    exc_info=True,
+                    extra={"event": "websocket_send_failed", "user_id": user_id},
+                )
                 dead.append(ws)
 
         for ws in dead:

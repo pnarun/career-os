@@ -99,6 +99,13 @@ class Settings(BaseSettings):
     """Run overdue scans once on process start (after sleep/deploy). Disable if you only rely on APScheduler slots."""
     SCHEDULER_STARTUP_CATCHUP: bool = True
 
+    # Phase 0 — runtime feature flags (all default true; set false to disable subsystems)
+    SERVICE_MODE: str = "api"
+    ENABLE_SCHEDULER: bool = True
+    ENABLE_PLAYWRIGHT: bool = True
+    ENABLE_REALTIME: bool = True
+    ENABLE_AUTOMATION: bool = True
+
     # Upstash Redis REST (response caching)
     UPSTASH_REDIS_REST_URL: str = ""
     UPSTASH_REDIS_REST_TOKEN: str = ""

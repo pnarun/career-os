@@ -191,7 +191,11 @@ async def run_daily_job_scan_automation(preference_id: str) -> None:
         )
 
     except (ScanRunnerError, UserPreferencesNotFoundError) as exc:
-        logger.error("[DAILY_AUTOMATION_FAILED] preference_id=%s error=%s", preference_id, exc)
+        logger.exception(
+            "[DAILY_AUTOMATION_FAILED] preference_id=%s",
+            preference_id,
+            extra={"event": "daily_automation_failed", "preference_id": preference_id},
+        )
         await complete_automation_run(run_id, status="failed", error=str(exc))
     except Exception as exc:
         logger.exception("[DAILY_AUTOMATION_FAILED] preference_id=%s", preference_id)

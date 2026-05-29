@@ -41,6 +41,7 @@ from app.core.database import close_mongo_connection, connect_to_mongo
 from app.core.logging_config import configure_logging
 from app.core.rate_limit import RateLimitMiddleware
 from app.core.user_context_middleware import UserContextMiddleware
+from app.core.startup_banner import log_startup_banner
 from app.observability.api_latency_middleware import ApiLatencyMiddleware
 from app.core.redis_client import close_redis, get_redis
 from app.services.scheduler_service import shutdown_scheduler, start_scheduler
@@ -53,6 +54,7 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     realtime_task = None
     try:
+        log_startup_banner()
         logger.info(
             "Starting Career OS API environment=%s",
             settings.ENVIRONMENT,
@@ -66,20 +68,45 @@ async def lifespan(app: FastAPI):
         await ensure_all_mongo_indexes()
         await run_legacy_data_migration()
         await seed_demo_users()
-        await start_scheduler()
-        realtime_task = await start_realtime_subscriber()
+
+        if settings.ENABLE_SCHEDULER:
+            await start_scheduler()
+        else:
+            logger.info(
+                "[STARTUP] ENABLE_SCHEDULER=false — APScheduler not started",
+                extra={"event": "startup", "scheduler": "disabled"},
+            )
+
+        if settings.ENABLE_REALTIME:
+            realtime_task = await start_realtime_subscriber()
+            logger.info(
+                "[STARTUP] Realtime subscriber state=%s",
+                "started" if realtime_task else "in_process_only",
+                extra={"event": "startup", "realtime": "enabled"},
+            )
+        else:
+            logger.info(
+                "[STARTUP] ENABLE_REALTIME=false — Redis subscriber not started",
+                extra={"event": "startup", "realtime": "disabled"},
+            )
+
         from app.core.startup_checks import log_startup_verification
 
         await log_startup_verification()
         logger.info("Application ready", extra={"event": "startup", "status": "ok"})
     except Exception:
-        logger.exception("Failed to initialize application on startup")
+        logger.exception(
+            "Failed to initialize application on startup",
+            extra={"event": "startup", "status": "failed"},
+        )
         raise
     yield
     if realtime_task:
         realtime_task.cancel()
-    await shutdown_scheduler()
-    await shutdown_automation()
+    if settings.ENABLE_SCHEDULER:
+        await shutdown_scheduler()
+    if settings.ENABLE_AUTOMATION:
+        await shutdown_automation()
     close_redis()
     await close_mongo_connection()
 

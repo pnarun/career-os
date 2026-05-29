@@ -7,7 +7,9 @@ import logging
 from app.core.config import settings
 from app.core.database import get_database
 from app.core.redis_client import get_redis, redis_health
+from app.core.runtime_diagnostics import process_memory_snapshot
 from app.realtime.websocket_manager import realtime_manager
+from app.services.scheduler_service import get_scheduler_health_snapshot
 
 logger = logging.getLogger(__name__)
 
@@ -26,24 +28,40 @@ async def log_startup_verification() -> None:
     except Exception as exc:
         mongo_status = "down"
         mongo_error = str(exc)[:200]
+        logger.exception(
+            "MongoDB ping failed on startup",
+            extra={"event": "startup_verification", "mongo_status": mongo_status},
+        )
 
     redis = redis_health()
     redis_status = redis.get("status", "unknown")
+    scheduler_snap = get_scheduler_health_snapshot()
+    memory = process_memory_snapshot()
 
     logger.info(
-        "Startup verification environment=%s mongo=%s redis=%s websocket=ready "
-        "extension_min_version=%s scheduler_heartbeat=%s",
+        "[STARTUP] verification complete environment=%s mongo=%s redis=%s "
+        "scheduler=%s realtime=%s automation=%s celery=%s memory_rss_mb=%s",
         settings.ENVIRONMENT,
         mongo_status,
         redis_status,
-        settings.EXTENSION_MIN_VERSION,
-        settings.SCHEDULER_HEARTBEAT_ENABLED,
+        scheduler_snap.get("scheduler", "unknown"),
+        "enabled" if settings.ENABLE_REALTIME else "disabled",
+        "enabled" if settings.ENABLE_AUTOMATION else "disabled",
+        "enabled" if settings.CELERY_ENABLED else "disabled",
+        memory.get("rss_mb") if memory.get("available") else "n/a",
         extra={
             "event": "startup_verification",
             "mongo_status": mongo_status,
             "redis_status": redis_status,
+            "scheduler": scheduler_snap,
             "websocket_connections": realtime_manager.total_connections(),
             "extension_min_version": settings.EXTENSION_MIN_VERSION,
+            "scheduler_startup_catchup": settings.SCHEDULER_STARTUP_CATCHUP,
+            "enable_scheduler": settings.ENABLE_SCHEDULER,
+            "enable_playwright": settings.ENABLE_PLAYWRIGHT,
+            "enable_realtime": settings.ENABLE_REALTIME,
+            "enable_automation": settings.ENABLE_AUTOMATION,
+            "process_memory": memory,
         },
     )
 

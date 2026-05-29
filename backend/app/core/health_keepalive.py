@@ -6,6 +6,13 @@ import logging
 import time
 from typing import Any
 
+from app.core.config import settings
+from app.core.database import get_database
+from app.core.runtime_diagnostics import process_memory_snapshot
+from app.observability.operational_metrics import observability_snapshot
+from app.realtime.websocket_manager import realtime_manager
+from app.services.beta_ops_service import provider_health_from_metrics, scan_subsystem_summary
+
 logger = logging.getLogger(__name__)
 
 _cache: dict[str, Any] | None = None
@@ -68,12 +75,6 @@ async def build_detailed_health_payload(*, service: str) -> dict[str, Any]:
     """Expanded health for monitors and beta ops (cached briefly)."""
     global _detail_cache, _detail_cache_at
 
-    from app.core.config import settings
-    from app.core.database import get_database
-    from app.observability.operational_metrics import observability_snapshot
-    from app.realtime.websocket_manager import realtime_manager
-    from app.services.beta_ops_service import provider_health_from_metrics, scan_subsystem_summary
-
     now = time.monotonic()
     if _detail_cache is not None and (now - _detail_cache_at) < 5.0:
         return dict(_detail_cache)
@@ -88,6 +89,7 @@ async def build_detailed_health_payload(*, service: str) -> dict[str, Any]:
             await db.command("ping")
             mongo = {"status": "ok"}
     except Exception as exc:
+        logger.debug("MongoDB health check failed: %s", exc, exc_info=True)
         mongo = {"status": "down", "error": str(exc)[:120]}
 
     obs = observability_snapshot()
@@ -107,6 +109,14 @@ async def build_detailed_health_payload(*, service: str) -> dict[str, Any]:
         "providers": provider_health_from_metrics(),
         "cache_hit_ratio": obs.get("cache_hit_ratio"),
         "extension_min_version": settings.EXTENSION_MIN_VERSION,
+        "process_memory": process_memory_snapshot(),
+        "feature_flags": {
+            "enable_scheduler": settings.ENABLE_SCHEDULER,
+            "enable_playwright": settings.ENABLE_PLAYWRIGHT,
+            "enable_realtime": settings.ENABLE_REALTIME,
+            "enable_automation": settings.ENABLE_AUTOMATION,
+            "scheduler_startup_catchup": settings.SCHEDULER_STARTUP_CATCHUP,
+        },
     }
     _detail_cache = payload
     _detail_cache_at = now
